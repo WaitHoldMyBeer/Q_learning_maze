@@ -5,14 +5,13 @@ import random
 import matplotlib.pyplot as plt
 from collections import deque
 
-class ComplexMazeEnv(gym.Env):
+class SouthEastMazeEnv(gym.Env):
     """
-    A more complex environment reflecting the real experiment’s logic.
-    It features:
-      - Four possible actions: move forward, turn left, turn right, turn around.
-      - Door configurations for goal-seeking vs. guided mode.
-      - Multiple sequential trials within a single episode.
-      - Optional reward shaping to give intermediate feedback.
+    A maze environment similar to ComplexMazeEnv but with start arms on the southern 
+    and eastern borders. For a 7x7 maze, the agent starts at (6, 3) (southern center)
+    or (3, 6) (eastern center). This difference ensures that while the first turning 
+    decision remains similar, the second turning decision is different, allowing for 
+    comparison of learning rates.
     """
     metadata = {"render_modes": ["human"]}
 
@@ -21,11 +20,12 @@ class ComplexMazeEnv(gym.Env):
                  height=7,
                  cue_on=True,
                  goal_corner=(0, 0),
-                 proximal_start_arm=(3, 0),
-                 distal_start_arm=(3, 6),
+                 # New default start positions: southern and eastern start arms
+                 southern_start_arm=(6, 3),
+                 eastern_start_arm=(3, 6),
                  max_env_steps=2000,
                  reward_shaping=True):
-        super(ComplexMazeEnv, self).__init__()
+        super(SouthEastMazeEnv, self).__init__()
 
         self.width = width
         self.height = height
@@ -44,15 +44,19 @@ class ComplexMazeEnv(gym.Env):
         self.goal_corner = goal_corner
         self.other_corners = [c for c in all_corners if c != self.goal_corner]
 
-        self.proximal_start_arm = proximal_start_arm
-        self.distal_start_arm = distal_start_arm
+        # Use new start arms: southern and eastern
+        self.southern_start_arm = southern_start_arm
+        self.eastern_start_arm = eastern_start_arm
 
+        # Define observation space: (x, y, orientation, cue_bit)
         obs_low = np.array([0, 0, 0, 0], dtype=np.int32)
         obs_high = np.array([height - 1, width - 1, 3, 1], dtype=np.int32)
         self.observation_space = spaces.Box(low=obs_low, high=obs_high, shape=(4,), dtype=np.int32)
 
+        # 4 discrete actions: 0=forward, 1=turn left, 2=turn right, 3=turn around
         self.action_space = spaces.Discrete(4)
 
+        # Tracking trial performance
         self.num_correct_trials = 0
         self.num_total_trials = 0
 
@@ -73,11 +77,13 @@ class ComplexMazeEnv(gym.Env):
         self.num_total_trials = 0
         self.pending_reward = 0.0
 
-        random_start = random.choice([self.proximal_start_arm, self.distal_start_arm])
+        # Choose random start from the southern and eastern start arms.
+        random_start = random.choice([self.southern_start_arm, self.eastern_start_arm])
         self._start_new_trial(random_start)
         return self._get_obs(), {}
 
     def _start_new_trial(self, start_arm):
+        """Place the agent in the chosen start arm with an appropriate orientation."""
         self.agent_x, self.agent_y = start_arm
         self.agent_orientation = self._infer_orientation(start_arm)
         self.in_guided_mode = False
@@ -85,26 +91,34 @@ class ComplexMazeEnv(gym.Env):
         self._configure_doors_for_goal_seeking()
 
     def _infer_orientation(self, cell):
+        """Infer a natural orientation based on the starting cell's location."""
         x, y = cell
-        if x == 0:
-            return 2  
+        # For bottom row (southern start), face North (0)
         if x == self.height - 1:
-            return 0  
-        if y == 0:
-            return 1  
+            return 0
+        # For right column (eastern start), face West (3)
         if y == self.width - 1:
-            return 3  
-        return 2  
+            return 3
+        # If on top row, face South
+        if x == 0:
+            return 2
+        # If on left column, face East
+        if y == 0:
+            return 1
+        return 2  # default
 
     def _configure_doors_for_goal_seeking(self):
+        """Set open cells based on a central plus and perimeter pattern."""
         self.open_cells = self._build_plus_and_perimeter()
 
     def _configure_doors_for_guidance(self, next_arm):
+        """Restrict movement along the perimeter to guide the agent back."""
         current_corner = (self.agent_x, self.agent_y)
         path_on_perimeter = self._perimeter_path(current_corner, next_arm)
         self.open_cells = set(path_on_perimeter)
 
     def _build_plus_and_perimeter(self):
+        """Return a set of cells corresponding to the perimeter and a central plus."""
         cells = set()
         for col in range(self.width):
             cells.add((0, col))
@@ -121,6 +135,7 @@ class ComplexMazeEnv(gym.Env):
         return cells
 
     def _perimeter_path(self, start_cell, goal_cell):
+        """Find a path along the perimeter cells using BFS."""
         perimeter = set()
         for col in range(self.width):
             perimeter.add((0, col))
@@ -163,7 +178,8 @@ class ComplexMazeEnv(gym.Env):
         return path
 
     def _choose_next_start_arm(self):
-        return random.choice([self.proximal_start_arm, self.distal_start_arm])
+        """Randomly select the next starting arm for the guided mode."""
+        return random.choice([self.southern_start_arm, self.eastern_start_arm])
 
     def _get_obs(self):
         return np.array([self.agent_x, self.agent_y, self.agent_orientation, self.cue_bit], dtype=np.int32)
@@ -214,13 +230,13 @@ class ComplexMazeEnv(gym.Env):
 
     def _attempt_move_forward(self):
         x, y = self.agent_x, self.agent_y
-        if self.agent_orientation == 0:   
+        if self.agent_orientation == 0:
             nx, ny = x - 1, y
-        elif self.agent_orientation == 1: 
+        elif self.agent_orientation == 1:
             nx, ny = x, y + 1
-        elif self.agent_orientation == 2: 
+        elif self.agent_orientation == 2:
             nx, ny = x + 1, y
-        else:                             
+        else:
             nx, ny = x, y - 1
         if (nx, ny) in self.open_cells:
             self.agent_x, self.agent_y = nx, ny
@@ -242,9 +258,8 @@ class ComplexMazeEnv(gym.Env):
     def close(self):
         pass
 
-# Helper functions for turn evaluation
+# Helper functions for turn evaluation (same as before)
 def compute_desired_orientation(agent_x, agent_y, goal_corner):
-    # A simple heuristic: choose the axis with greater distance
     dx = goal_corner[0] - agent_x
     dy = goal_corner[1] - agent_y
     if abs(dx) >= abs(dy):
@@ -256,7 +271,8 @@ def angular_distance(a, b):
     diff = abs(a - b)
     return min(diff, 4 - diff)
 
-# Modified Q-learning training that also tracks first and second turn correctness per trial
+# Modified Q-learning training routine that tracks overall trial correctness
+# as well as the correctness of the first and second turning actions.
 def improved_train_q_learning(env,
                               num_episodes=100,
                               alpha=0.1,
@@ -264,10 +280,6 @@ def improved_train_q_learning(env,
                               initial_epsilon=1.0,
                               min_epsilon=0.1,
                               epsilon_decay=0.99):
-    """
-    Q-learning routine that logs multiple metrics per episode.
-    Also tracks the fraction of correct first and second turns.
-    """
     q_table = np.zeros((env.height, env.width, 4, 2, 4))
     metrics = {
         'fraction_correct': [],
@@ -279,13 +291,13 @@ def improved_train_q_learning(env,
     }
     epsilon = initial_epsilon
 
-    # For tracking turning decisions across trials within an episode:
+    # Variables for tracking turn performance within trials
     first_turn_correct_total = 0
     first_turn_total = 0
     second_turn_correct_total = 0
     second_turn_total = 0
-    trial_turn_count = 0  # counts turns in current trial
-    last_trial_total = env.num_total_trials  # to detect trial boundaries
+    trial_turn_count = 0
+    last_trial_total = env.num_total_trials
 
     for episode in range(num_episodes):
         obs, _ = env.reset()
@@ -303,39 +315,29 @@ def improved_train_q_learning(env,
 
         while not done:
             state = tuple(obs)  # (x, y, orientation, cue_bit)
-            # Decide on action (epsilon-greedy)
             if random.random() < epsilon:
                 action = env.action_space.sample()
             else:
                 action = np.argmax(q_table[state])
-                
-            # --- Turn tracking ---
-            # We record only if the action is a turning action (left or right)
+            
+            # Track turning decisions when the action is a turn (left or right)
             if action in [1, 2]:
                 old_orientation = obs[2]
                 desired = compute_desired_orientation(obs[0], obs[1], env.goal_corner)
-                if action == 1:
-                    new_orientation = (old_orientation - 1) % 4
-                elif action == 2:
-                    new_orientation = (old_orientation + 1) % 4
+                new_orientation = (old_orientation - 1) % 4 if action == 1 else (old_orientation + 1) % 4
                 diff_old = angular_distance(old_orientation, desired)
                 diff_new = angular_distance(new_orientation, desired)
-                is_correct = diff_new < diff_old  # turn is "correct" if it brings agent closer
-
-                # Record first turn if not yet recorded in this trial
+                is_correct = diff_new < diff_old
                 if trial_turn_count == 0:
                     first_turn_total += 1
                     if is_correct:
                         first_turn_correct_total += 1
                     trial_turn_count += 1
-                # Else, if this is the second turn in this trial (only record the first two turns)
                 elif trial_turn_count == 1:
                     second_turn_total += 1
                     if is_correct:
                         second_turn_correct_total += 1
                     trial_turn_count += 1
-                # If more than 2 turns, we ignore for this analysis.
-            # --- End Turn tracking ---
 
             next_obs, reward, done, _, _ = env.step(action)
             cumulative_reward += reward
@@ -349,9 +351,7 @@ def improved_train_q_learning(env,
             obs = next_obs
             steps += 1
 
-            # Check if a trial boundary occurred: env.num_total_trials increased
             if env.num_total_trials > last_trial_total:
-                # A new trial has started, so reset the per-trial turn counter.
                 trial_turn_count = 0
                 last_trial_total = env.num_total_trials
 
@@ -360,7 +360,6 @@ def improved_train_q_learning(env,
         fraction = correct_trials / total_trials if total_trials > 0 else 0.0
         steps_per_trial = steps / total_trials if total_trials > 0 else 0.0
 
-        # Compute fraction of correct first and second turns for this episode
         first_turn_fraction = first_turn_correct_total / first_turn_total if first_turn_total > 0 else 0.0
         second_turn_fraction = second_turn_correct_total / second_turn_total if second_turn_total > 0 else 0.0
 
@@ -385,7 +384,7 @@ def run_multiple_trials(num_runs=5, num_episodes=100):
         'second_turn_fraction': []
     }
     for run in range(num_runs):
-        env = ComplexMazeEnv(width=7, height=7, cue_on=True, reward_shaping=True, max_env_steps=2000)
+        env = SouthEastMazeEnv(width=7, height=7, cue_on=True, reward_shaping=True, max_env_steps=2000)
         _, metrics = improved_train_q_learning(env, num_episodes=num_episodes)
         for key in collected_metrics:
             collected_metrics[key].append(metrics[key])
@@ -401,7 +400,6 @@ def plot_metrics(avg_metrics, std_metrics, num_episodes=100):
     episodes = np.arange(1, num_episodes + 1)
     fig, axs = plt.subplots(2, 2, figsize=(12, 10))
 
-    # Plot overall fraction of correct trials and overlay first/second turn fractions
     axs[0, 0].errorbar(episodes, avg_metrics['fraction_correct'], yerr=std_metrics['fraction_correct'],
                        fmt='-o', capsize=3, label='Overall')
     axs[0, 0].errorbar(episodes, avg_metrics['first_turn_fraction'], yerr=std_metrics['first_turn_fraction'],
