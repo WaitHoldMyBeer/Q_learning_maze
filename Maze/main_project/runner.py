@@ -26,8 +26,7 @@ def run_multiple_trials(num_runs=5, block_size=32, success_threshold=0.7, max_bl
     
     for run in range(num_runs):
         # Use a more reasonable max_env_steps value (2000 instead of 100000)
-        env = ComplexMazeEnv(width=7, height=7, cue_on=True, reward_shaping=False, max_env_steps=2000,
-                            stagnation_window=50, stagnation_area_size=3, stagnation_penalty=-0.2)
+        env = ComplexMazeEnv(width=7, height=7, cue_on=True, reward_shaping=False, max_env_steps=2000)
         print(f"Run {run + 1}/{num_runs}")
         
         # Create the Q-learning model once per run instead of once per block

@@ -24,22 +24,13 @@ class ComplexMazeEnv(gym.Env):
                  proximal_start_arm=(3, 0),
                  distal_start_arm=(3, 6),
                  max_env_steps=2000,
-                 reward_shaping=True,
-                 stagnation_window=50,  # Length of position history to track
-                 stagnation_area_size=3,  # Size of area (3x3) to check for stagnation
-                 stagnation_penalty=-0.2):  # Penalty for staying in same area
+                 reward_shaping=True):
         super(ComplexMazeEnv, self).__init__()
 
         self.width = width
         self.height = height
         self.max_env_steps = max_env_steps
         self.reward_shaping = reward_shaping
-
-        # New parameters for stagnation detection
-        self.stagnation_window = stagnation_window
-        self.stagnation_area_size = stagnation_area_size
-        self.stagnation_penalty = stagnation_penalty
-        self.position_history = deque(maxlen=stagnation_window)
 
         self.cue_on = cue_on
         self.cue_bit = 1 if cue_on else 0
@@ -81,9 +72,6 @@ class ComplexMazeEnv(gym.Env):
         self.num_correct_trials = 0
         self.num_total_trials = 0
         self.pending_reward = 0.0
-        
-        # Reset position history for stagnation detection
-        self.position_history = deque(maxlen=self.stagnation_window)
 
         self.random_start = random.choice([self.proximal_start_arm, self.distal_start_arm])
         self._start_new_trial(self.random_start)
@@ -202,9 +190,6 @@ class ComplexMazeEnv(gym.Env):
         elif action == 3:
             self.agent_orientation = (self.agent_orientation + 2) % 4
 
-        # Record agent's position for stagnation detection
-        self.position_history.append((self.agent_x, self.agent_y))
-        
         if not self.in_guided_mode:
             if (self.agent_x, self.agent_y) == self.goal_corner:
                 self._finish_trial(correct=True)
@@ -222,34 +207,12 @@ class ComplexMazeEnv(gym.Env):
                 reward += (old_distance - new_distance) * 0.1
             else:
                 reward += -0.01
-                
-            # Check for stagnation and apply penalty if needed
-            if len(self.position_history) >= self.stagnation_window:
-                if self._is_stagnating():
-                    reward += self.stagnation_penalty
-                    info['stagnating'] = True
 
         if self.env_step_count >= self.max_env_steps:
             done = True
 
         obs = self._get_obs()
         return obs, reward, done, False, info
-        
-    def _is_stagnating(self):
-        """Check if the agent is staying within a small area (stagnating)"""
-        if len(self.position_history) < self.stagnation_window:
-            return False
-            
-        # Find the bounding box of recent positions
-        x_coords = [pos[0] for pos in self.position_history]
-        y_coords = [pos[1] for pos in self.position_history]
-        
-        min_x, max_x = min(x_coords), max(x_coords)
-        min_y, max_y = min(y_coords), max(y_coords)
-        
-        # Check if bounding box is smaller than or equal to stagnation_area_size x stagnation_area_size
-        return (max_x - min_x + 1 <= self.stagnation_area_size and 
-                max_y - min_y + 1 <= self.stagnation_area_size)
 
     def _attempt_move_forward(self):
         x, y = self.agent_x, self.agent_y
