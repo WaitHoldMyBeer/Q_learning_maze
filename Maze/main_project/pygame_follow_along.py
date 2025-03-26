@@ -3,9 +3,9 @@ import random
 
 pygame.init()
 
-SCREEN_WIDTH = 900
-SCREEN_HEIGHT = 950
-CELL_SIZE = 100
+SCREEN_WIDTH = 810
+SCREEN_HEIGHT = 860
+CELL_SIZE = 90
 MAZE_WIDTH  = SCREEN_WIDTH // CELL_SIZE
 MAZE_HEIGHT = (SCREEN_HEIGHT-50) // CELL_SIZE
 WHITE = (255, 255, 255)
@@ -17,15 +17,18 @@ GRAY = (128, 128, 128)
 # (y inverse, x)
 def create_maze():
   maze = [[0] * MAZE_WIDTH for _ in range(MAZE_HEIGHT)]
-  for x in range(MAZE_WIDTH):
-    maze[0][x] = 1
-    maze[MAZE_HEIGHT-1][x] = 1
+  for x in range(1,MAZE_WIDTH-1):
+    maze[1][x] = 1
+    maze[MAZE_HEIGHT-2][x] = 1
     maze[MAZE_HEIGHT//2][x] = 1
-  for y in range(MAZE_HEIGHT):
-    maze[y][MAZE_WIDTH-1] = 1
+  for y in range(1,MAZE_HEIGHT-1):
+    maze[y][MAZE_WIDTH-2] = 1
     maze[y][MAZE_WIDTH//2] = 1
-    maze[y][0] = 1
+    maze[y][1] = 1
   maze[0][0] = 2
+  maze[0][MAZE_WIDTH-1] = 3
+  maze[MAZE_HEIGHT-1][0] = 3
+  maze[MAZE_HEIGHT-1][MAZE_WIDTH-1] = 3
   return maze
 
 def draw_maze(screen, maze):
@@ -37,6 +40,8 @@ def draw_maze(screen, maze):
         pygame.draw.rect(screen, BLACK, (x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE))
       elif maze[y][x] == 2:
         pygame.draw.rect(screen, GREEN, (x*CELL_SIZE, y*CELL_SIZE, CELL_SIZE, CELL_SIZE))
+      elif maze[y][x] == 3:
+        pygame.draw.rect(screen, WHITE, (x*CELL_SIZE, y*CELL_SIZE, CELL_SIZE, CELL_SIZE))
 
 #update for direction and restricted movement
 class Agent:
