@@ -25,7 +25,7 @@ def run_multiple_trials(num_runs=5, block_size=32, success_threshold=0.7, max_bl
     }
     
     for run in range(num_runs):
-        # Use a more reasonable max_env_steps value (2000 instead of 100000)
+        # Use a more reasonable gbdegnjjfjasdjmax_env_steps value (2000 instead of 100000)
         env = ComplexMazeEnv(width=7, height=7, cue_on=True, reward_shaping=False, max_env_steps=2000)
         print(f"Run {run + 1}/{num_runs}")
         
