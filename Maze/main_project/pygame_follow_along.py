@@ -48,14 +48,42 @@ class Agent:
   def __init__(self, x, y):
     self.x = x
     self.y = y
-  def move(self, dx, dy, maze):
-    new_x = self.x + dx
-    new_y = self.y + dy
+    self.orientation = 0 #0 north, 1 east, 2 south, 3 west
+  def move(self, maze):
+    states_to_coordinates = [ # y 0 is at top
+      (4,3), (4,2), (4,5), (4,6), (3,4), (2,4), (5,4), (6,4), #center plus
+      (3,1), (2,1), (5,1), (6,1), # top perimeter
+      (3,7), (2,7), (5,7), (6,7), # bottom perimeter
+      (1, 3), (1,2), (1,5), (1,6), #left perimeter
+      (7,3), (7,2), (7,5), (7,6), # right perimeter
+      (7,1), (8,0), # top right
+      (7,7), (8,8), # bottom right corner
+      (1,7), (0,8), # bottom left corner 
+      (1,1), (0,0) # top left corner
+    ]
+    movement = [(0, -1), (-1,0), (0,1),(1, 0)]
+    new_x = self.x + movement[self.orientation][0]
+    new_y = self.y + movement[self.orientation][1]
     if 0 <= new_x < MAZE_WIDTH and 0 <= new_y < MAZE_HEIGHT and maze[new_y][new_x] != 0:
       self.x = new_x
       self.y = new_y
+  def turn(self, dir): # left = 0, right = 1
+    self.orientation = ((self.orientation+(3 if dir == 1 else 1)) % 4)
+    print(self.orientation)
   def draw(self, screen):
-    pygame.draw.rect(screen, RED, (self.x * CELL_SIZE, self.y * CELL_SIZE, CELL_SIZE, CELL_SIZE))
+    #Direction Array
+    direction_points = [
+        (self.x * CELL_SIZE, self.y * CELL_SIZE + CELL_SIZE),  # bottom left
+        (self.x * CELL_SIZE + CELL_SIZE, self.y * CELL_SIZE + CELL_SIZE),  # bottom right
+        (self.x * CELL_SIZE + CELL_SIZE, self.y * CELL_SIZE),  # top right
+        (self.x * CELL_SIZE, self.y * CELL_SIZE),  # top left
+        (self.x * CELL_SIZE + (CELL_SIZE // 2), self.y * CELL_SIZE),  # top middle
+        (self.x * CELL_SIZE, self.y * CELL_SIZE + (CELL_SIZE // 2)),  # left middle
+        (self.x * CELL_SIZE + (CELL_SIZE // 2), self.y * CELL_SIZE + CELL_SIZE),  # bottom middle
+        (self.x * CELL_SIZE + CELL_SIZE, self.y * CELL_SIZE + (CELL_SIZE // 2)),  # right middle
+    ]
+    pygame.draw.polygon(screen, RED, [direction_points[self.orientation % 4], direction_points[(self.orientation+1)%4], direction_points[4+(self.orientation)%4]])
+    
   def reset(self):
     self.x = MAZE_HEIGHT//2
     self.y = MAZE_WIDTH//2
@@ -89,13 +117,13 @@ def main():
         running = False
       elif event.type == pygame.KEYDOWN:
         if event.key == pygame.K_UP:
-          agent.move(0, -1, maze)
+          agent.move(maze)
         elif event.key== pygame.K_DOWN:
-          agent.move(0,1,maze)
+          agent.move(maze)
         elif event.key == pygame.K_LEFT:
-          agent.move(-1, 0, maze)
+          agent.turn(0)
         elif event.key == pygame.K_RIGHT:
-          agent.move(1,0, maze)
+          agent.turn(1)
     screen.fill(WHITE)
     draw_maze(screen, maze)
     agent.draw(screen)

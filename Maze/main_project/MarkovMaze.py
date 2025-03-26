@@ -15,4 +15,3 @@ rewards[31] = 10
 class MarkovMaze(gym.Env):
   def __init__(self):
     self.size = 32
-    

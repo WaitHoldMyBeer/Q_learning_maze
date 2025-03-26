@@ -39,7 +39,7 @@ class Player:
   def move(self, dx, dy, maze):
     new_x = self.x + dx
     new_y = self.y + dy
-    if 0 <= new_x < MAZE_WIDTH and 0 <= new_y < MAZE_HEIGHT and maze[new_y]:
+    if 0 <= new_x < MAZE_WIDTH and 0 <= new_y < MAZE_HEIGHT and maze[new_y][new_x]!=1:
       self.x = new_x
       self.y = new_y
   def draw(self, screen):
