@@ -13,6 +13,7 @@ BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 GRAY = (128, 128, 128)
+LIGHT_RED = (255, 100, 100)
 
 # (y inverse, x)
 def create_maze():
@@ -60,7 +61,7 @@ class Agent:
       (1,7), (0,8), # bottom left corner 
       (1,1), (0,0) # top left corner
     ]
-    legal_movement = [ # forward, left, right, about face | 0 is not allowed
+    self.legal_movement = [ # forward, left, right, about face | 0 is not allowed
       [4, 8, 6, 2],
       [0, 10, 12, 1],
       [2, 6, 8, 4],
@@ -69,10 +70,30 @@ class Agent:
       [0, 20, 18, 5],
       [6, 4, 2, 8],
       [0, 22, 24, 7], #8
-      [12, 0, 1, 10],
+      [12, 0, 1, 10], #9
       [0, 17, 32, 9],
-      [10, 1, 0, 12], #12
-      [16, 3, 0, ]
+      [10, 1, 0, 12], #11
+      [0, 26, 21, 11], # 12
+      [16, 3, 0, 14],
+      [0, 30, 19, 13],
+      [14, 0, 3, 16],
+      [0, 23, 28, 15], #16
+      [20, 5, 0, 18],
+      [0, 32, 9, 17],
+      [18, 0, 5, 20],
+      [0, 13, 30, 19], #20
+      [24, 0, 7, 22],
+      [0, 11, 26, 21],
+      [22, 7, 0, 24],
+      [0, 28, 15, 23], #24
+      [0, 21, 11, 26],
+      [0, 0, 0, 25],
+      [0, 15, 23, 28],
+      [0, 0, 0, 27], #28
+      [0, 19, 13, 30],
+      [0, 0, 0, 29],
+      [0, 9, 17, 32],
+      [0, 0, 0, 31], #32
     ]
   def move(self, maze):
     
@@ -84,7 +105,6 @@ class Agent:
       self.y = new_y
   def turn(self, dir): # left = 0, right = 1
     self.orientation = ((self.orientation+(3 if dir == 1 else 1)) % 4)
-    print(self.orientation)
   def draw(self, screen):
     #Direction Array
     direction_points = [
@@ -97,8 +117,15 @@ class Agent:
         (self.x * CELL_SIZE + (CELL_SIZE // 2), self.y * CELL_SIZE + CELL_SIZE),  # bottom middle
         (self.x * CELL_SIZE + CELL_SIZE, self.y * CELL_SIZE + (CELL_SIZE // 2)),  # right middle
     ]
+    
     font = pygame.font.SysFont(None, 30)
-    state = self.states_to_coordinates.index((self.x, self.y)) + 1 if ((self.x, self.y) in self.states_to_coordinates) else ("Invalid State")
+    state = self.states_to_coordinates.index((self.x, self.y)) + 1 if ((self.x, self.y) in self.states_to_coordinates) else 0
+    available_states = self.legal_movement[state-1]
+    print(available_states)
+    for i in range(4):
+      if available_states[i] != 0:
+        x_coordinate = self
+        pygame.draw.circle(screen, LIGHT_RED, (self.states_to_coordinates[available_states[i]-1][0]*CELL_SIZE + (CELL_SIZE //2), self.states_to_coordinates[available_states[i]-1][1]*CELL_SIZE + (CELL_SIZE //2),), 10)
     text = font.render(f"Location: ({self.x}, {self.y})   State: {state}", True, WHITE)
     screen.blit(text, (300, 10))
     pygame.draw.polygon(screen, RED, [direction_points[self.orientation % 4], direction_points[(self.orientation+1)%4], direction_points[4+(self.orientation)%4]])
