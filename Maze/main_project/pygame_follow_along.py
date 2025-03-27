@@ -49,8 +49,7 @@ class Agent:
     self.x = x
     self.y = y
     self.orientation = 0 #0 north, 1 east, 2 south, 3 west
-  def move(self, maze):
-    states_to_coordinates = [ # y 0 is at top
+    self.states_to_coordinates = [ # y 0 is at top
       (4,3), (4,2), (4,5), (4,6), (3,4), (2,4), (5,4), (6,4), #center plus
       (3,1), (2,1), (5,1), (6,1), # top perimeter
       (3,7), (2,7), (5,7), (6,7), # bottom perimeter
@@ -61,6 +60,22 @@ class Agent:
       (1,7), (0,8), # bottom left corner 
       (1,1), (0,0) # top left corner
     ]
+    legal_movement = [ # forward, left, right, about face | 0 is not allowed
+      [4, 8, 6, 2],
+      [0, 10, 12, 1],
+      [2, 6, 8, 4],
+      [0, 16, 14, 3], #4
+      [8, 2, 4, 6],
+      [0, 20, 18, 5],
+      [6, 4, 2, 8],
+      [0, 22, 24, 7], #8
+      [12, 0, 1, 10],
+      [0, 17, 32, 9],
+      [10, 1, 0, 12], #12
+      [16, 3, 0, ]
+    ]
+  def move(self, maze):
+    
     movement = [(0, -1), (-1,0), (0,1),(1, 0)]
     new_x = self.x + movement[self.orientation][0]
     new_y = self.y + movement[self.orientation][1]
@@ -82,6 +97,10 @@ class Agent:
         (self.x * CELL_SIZE + (CELL_SIZE // 2), self.y * CELL_SIZE + CELL_SIZE),  # bottom middle
         (self.x * CELL_SIZE + CELL_SIZE, self.y * CELL_SIZE + (CELL_SIZE // 2)),  # right middle
     ]
+    font = pygame.font.SysFont(None, 30)
+    state = self.states_to_coordinates.index((self.x, self.y)) + 1 if ((self.x, self.y) in self.states_to_coordinates) else ("Invalid State")
+    text = font.render(f"Location: ({self.x}, {self.y})   State: {state}", True, WHITE)
+    screen.blit(text, (300, 10))
     pygame.draw.polygon(screen, RED, [direction_points[self.orientation % 4], direction_points[(self.orientation+1)%4], direction_points[4+(self.orientation)%4]])
     
   def reset(self):
