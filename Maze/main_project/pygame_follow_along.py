@@ -30,8 +30,6 @@ BLUE = (0, 0, 255)
 # (y inverse, x)
 class Maze:
   def __init__(self, goal_corner = 0, start = 0):
-    self.potential_goal_seeking_doors = [1,9,11,3,13,15,5,17,19,7,21,23]
-    self.potential_return_doors = [2,9,11,4,13,15, 8, 21, 23, 6, 17, 19]
     self.maze = [[0] * MAZE_WIDTH for _ in range(MAZE_HEIGHT)]
     self.start = start
     for x in range(1,MAZE_WIDTH-1):
@@ -62,22 +60,30 @@ class Maze:
         elif self.maze[y][x] == 4: # door
           pygame.draw.rect(screen, BLUE, (x*CELL_SIZE, y*CELL_SIZE, CELL_SIZE, CELL_SIZE))
   def configure_doors_for_goal_seeking(self):
-    if self.start == 0: # 3, 4, 5
-      for i in range(0,3): 
-        self.maze[STATES_TO_COORDINATES[self.potential_goal_seeking_doors[3 + i]-1][1]][STATES_TO_COORDINATES[self.potential_goal_seeking_doors[3 + i]-1][0]] = 4
-    if self.start == 1: # 5, 6, 7
-      for i in range(0,3):
-        self.maze[STATES_TO_COORDINATES[self.potential_goal_seeking_doors[6 + i]-1][1]][STATES_TO_COORDINATES[self.potential_goal_seeking_doors[6 + i]-1][0]] = 4
-    if self.start == 2: # 1, 2, 3
-      print("start was 2")
-      for i in range(0,3):
-        self.maze[STATES_TO_COORDINATES[self.potential_goal_seeking_doors[0 + i]-1][1]][STATES_TO_COORDINATES[self.potential_goal_seeking_doors[0+i]-1][0]] = 4
+    self.potential_goal_seeking_doors = [1,9,11,3,13,15,5,17,19,7,21,23]
+    self.potential_return_doors = [2,9,11,4,13,15, 8, 21, 23, 6, 17, 19]
+    #3, 13, 15, 9, 11 for start 0
+    #13, 15, 1, 9, 11 for start 2
+    primary_offset = 0
+    if self.start == 0:
+      offset = 1
+    elif self.start == 2:
+      offset = 4
+    if self.start == 1:
+      offset = 4
+      primary_offset = 6
+    if self.start == 3:
+      offset = 1
+      primary_offset = 6
+    for i in range(0,5):
+      self.maze[STATES_TO_COORDINATES[self.potential_goal_seeking_doors[primary_offset + (offset+i)%6]-1][1]][STATES_TO_COORDINATES[self.potential_goal_seeking_doors[primary_offset + (offset+i)%6]-1][0]] = 4
   def configure_doors_for_return(self):
     if self.start == 0:
       self.maze[STATES_TO_COORDINATES[self.potential_return_doors[3]-1][1]][STATES_TO_COORDINATES[self.potential_return_doors[3]-1][0]] = 4
   def start_trial(self):
     current_trial = self.trials
-    self.start = random.choice([0, 2])
+    #self.start = random.choice([0, 1, 2, 3])
+    self.start = 1
     self.configure_doors_for_goal_seeking()
     return self.start
 
@@ -133,10 +139,19 @@ class Agent:
       [0, 0, 0, 31], #32
     ]
     self.state = STATES_TO_COORDINATES.index((self.x, self.y)) + 1 if ((self.x, self.y) in STATES_TO_COORDINATES) else 0
-  def move(self, move):
+  def move(self, move, maze):
     moves = [0,1,2,3]
     current_state = STATES_TO_COORDINATES.index((self.x, self.y)) + 1 if ((self.x, self.y) in STATES_TO_COORDINATES) else -1
     new_state = self.legal_movement[current_state-1][moves[move]] if self.legal_movement[current_state-1][moves[move]] != 0 else current_state
+
+    contains_door = False
+    for i in range(min(STATES_TO_COORDINATES[current_state-1][0], STATES_TO_COORDINATES[new_state-1][0]), max(STATES_TO_COORDINATES[current_state-1][0], STATES_TO_COORDINATES[new_state-1][0]) + 1):
+      for j in range(min(STATES_TO_COORDINATES[current_state-1][1], STATES_TO_COORDINATES[new_state-1][1]), max(STATES_TO_COORDINATES[current_state-1][1], STATES_TO_COORDINATES[new_state-1][1]) + 1):
+
+        if (maze.maze[j][i] == 4):
+          contains_door = True
+    if contains_door:
+      new_state = current_state
     self.x = STATES_TO_COORDINATES[new_state-1][0]
     self.y = STATES_TO_COORDINATES[new_state-1][1]
     self.state = new_state
@@ -159,7 +174,6 @@ class Agent:
         (self.x * CELL_SIZE + CELL_SIZE, self.y * CELL_SIZE + (CELL_SIZE // 2)),  # right middle
         (self.x * CELL_SIZE + (CELL_SIZE // 2), self.y * CELL_SIZE + CELL_SIZE),  # bottom middle
         (self.x * CELL_SIZE, self.y * CELL_SIZE + (CELL_SIZE // 2)),  # left middle
-
     ]
     
     font = pygame.font.SysFont(None, 30)
@@ -190,7 +204,6 @@ class Reward:
     screen.blit(text, (10, 10))
   def reset(self):
     self.current_reward = 0
-
 def find_start_cell(start):
   if start == 0:
     return (MAZE_HEIGHT//2, MAZE_HEIGHT//2 - 1)
@@ -206,7 +219,7 @@ def main():
   font = pygame.font.SysFont(None, 30)
   pygame.display.set_caption("Maze Game")
   clock = pygame.time.Clock()
-  maze = Maze(0, 0)
+  maze = Maze(0, 3)
   start = maze.start_trial()
   maze.draw_maze(screen)
   agent = Agent(find_start_cell(start)[0], find_start_cell(start)[1])
@@ -218,13 +231,13 @@ def main():
         running = False
       elif event.type == pygame.KEYDOWN:
         if event.key == pygame.K_UP:
-          agent.move(0)
+          agent.move(0, maze)
         elif event.key == pygame.K_DOWN:
-          agent.move(3)
+          agent.move(3, maze)
         elif event.key == pygame.K_LEFT:
-          agent.move(1)
+          agent.move(1, maze)
         elif event.key == pygame.K_RIGHT:
-          agent.move(2)
+          agent.move(2, maze)
     screen.fill(WHITE)
     maze.draw_maze(screen)
     agent.draw(screen)
