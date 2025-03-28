@@ -55,7 +55,6 @@ class ComplexMazeEnv(gym.Env):
 
         self.num_correct_trials = 0
         self.num_total_trials = 0
-
         self.in_guided_mode = False
         self.next_start_arm = None
 

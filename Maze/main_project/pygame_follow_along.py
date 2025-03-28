@@ -1,5 +1,6 @@
 import pygame
 import random
+import numpy as np
 
 pygame.init()
 
@@ -26,6 +27,15 @@ STATES_TO_COORDINATES = [ # y 0 is at top
       (1,1), (0,0) # top left corner
 ]
 BLUE = (0, 0, 255)
+def find_start_cell(start):
+    if start == 0:
+      return (MAZE_HEIGHT//2, MAZE_HEIGHT//2 - 1)
+    elif start == 1:
+      return (MAZE_HEIGHT//2 + 1, MAZE_WIDTH//2)
+    elif start == 2:
+      return (MAZE_HEIGHT//2, MAZE_WIDTH//2 + 1)
+    elif start == 3:
+      return (MAZE_HEIGHT//2 - 1, MAZE_WIDTH//2)
 
 # (y inverse, x)
 class Maze:
@@ -60,6 +70,7 @@ class Maze:
         elif self.maze[y][x] == 4: # door
           pygame.draw.rect(screen, BLUE, (x*CELL_SIZE, y*CELL_SIZE, CELL_SIZE, CELL_SIZE))
   def configure_doors_for_goal_seeking(self):
+    
     self.potential_goal_seeking_doors = [1,9,11,3,13,15,5,17,19,7,21,23]
     self.potential_return_doors = [2,9,11,4,13,15, 8, 21, 23, 6, 17, 19]
     #3, 13, 15, 9, 11 for start 0
@@ -78,12 +89,11 @@ class Maze:
     for i in range(0,5):
       self.maze[STATES_TO_COORDINATES[self.potential_goal_seeking_doors[primary_offset + (offset+i)%6]-1][1]][STATES_TO_COORDINATES[self.potential_goal_seeking_doors[primary_offset + (offset+i)%6]-1][0]] = 4
   def configure_doors_for_return(self):
+    
     if self.start == 0:
       self.maze[STATES_TO_COORDINATES[self.potential_return_doors[3]-1][1]][STATES_TO_COORDINATES[self.potential_return_doors[3]-1][0]] = 4
   def start_trial(self):
-    current_trial = self.trials
-    #self.start = random.choice([0, 1, 2, 3])
-    self.start = 1
+    self.start = random.choice([0, 1, 2, 3])
     self.configure_doors_for_goal_seeking()
     return self.start
 
@@ -175,7 +185,6 @@ class Agent:
         (self.x * CELL_SIZE + (CELL_SIZE // 2), self.y * CELL_SIZE + CELL_SIZE),  # bottom middle
         (self.x * CELL_SIZE, self.y * CELL_SIZE + (CELL_SIZE // 2)),  # left middle
     ]
-    
     font = pygame.font.SysFont(None, 30)
     
     available_states = self.legal_movement[self.state-1]
@@ -186,10 +195,12 @@ class Agent:
     text = font.render(f"Location: ({self.x}, {self.y})   State: {self.state}", True, WHITE)
     screen.blit(text, (300, 10))
     pygame.draw.polygon(screen, RED, [direction_points[self.orientation % 4], direction_points[(self.orientation+1)%4], direction_points[4+(self.orientation)%4]])
-    
+  
   def reset(self):
-    self.x = MAZE_HEIGHT//2
-    self.y = MAZE_WIDTH//2
+    self.start = random.choice([0, 1, 2, 3])
+    cell = find_start_cell(self.start)
+    self.y = cell[0]
+    self.x = cell[1]
 
 class Reward:
   def __init__(self, cumulative_reward, current_reward):
@@ -204,32 +215,58 @@ class Reward:
     screen.blit(text, (10, 10))
   def reset(self):
     self.current_reward = 0
-def find_start_cell(start):
-  if start == 0:
-    return (MAZE_HEIGHT//2, MAZE_HEIGHT//2 - 1)
-  elif start == 1:
-    return (MAZE_HEIGHT//2 + 1, MAZE_WIDTH//2)
-  elif start == 2:
-    return (MAZE_HEIGHT//2, MAZE_WIDTH//2 + 1)
-  elif start == 3:
-    return (MAZE_HEIGHT//2 - 1, MAZE_WIDTH//2)
+
+
+class QLearningModel:
+  def __init__(self, n_states = 32, n_actions = 4, alpha = 0.9, # learning rate
+    gamma = 0.95, # discount factor
+    epsilon = 1.0, # exploration rate
+    epsilon_decay = 0.9995, # decay rate for epsilon
+    min_epsilon = 0.01, # minimum exploration rate
+    block_size = 32, # number of episodes to train
+    max_steps = 200 # maximum steps per episode
+    ):
+    self.action_space = [0,1,2,3] # forward, left, right, about face
+    self.n_states = n_states
+    self.n_actions = n_actions
+    self.q_table = np.zeros((n_states, n_actions))
+    self.learning_rate = alpha
+    self.exploration_probability = epsilon
+    self.epsilon_decay = 0.9995
+    self.min_epsilon = min_epsilon
+    self.block_size = block_size
+    self.max_steps = max_steps
+    self.discount_factor = gamma
+  def choose_action(self, state):
+    if random.uniform(0,1) < self.exploration_probability:
+      return random.choice(self.action_space)
+    else:
+      return np.argmax(self.q_table[state])
+  def step(self, old_state, new_state, reward):
+    action = self.choose_action(state)
+    old_value = self.q_table[old_state, action]
+    next_max = np.max(self.q_table[new_state, :])
+    self.q_table[state, action] = (1-self.learning_rate) * old_value + self.learning_rate * (reward + self.discount_factor * next_max)
+    state = new_state
+    return 
 
 def main():
   screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-  font = pygame.font.SysFont(None, 30)
   pygame.display.set_caption("Maze Game")
-  clock = pygame.time.Clock()
   maze = Maze(0, 3)
   start = maze.start_trial()
   maze.draw_maze(screen)
   agent = Agent(find_start_cell(start)[0], find_start_cell(start)[1])
   reward = Reward(0, 0)
+  model = QLearningModel()
   running = True
   while running:
     for event in pygame.event.get():
+      
       if event.type == pygame.QUIT:
         running = False
       elif event.type == pygame.KEYDOWN:
+        print(model.choose_action(STATES_TO_COORDINATES.index((agent.y, agent.x))))
         if event.key == pygame.K_UP:
           agent.move(0, maze)
         elif event.key == pygame.K_DOWN:
@@ -245,6 +282,7 @@ def main():
     if maze.maze[agent.y][agent.x] == 2:
       reward.update(10)
       agent.reset()
+      maze.start_trial()
     pygame.display.flip()
 
 if __name__ == "__main__":
