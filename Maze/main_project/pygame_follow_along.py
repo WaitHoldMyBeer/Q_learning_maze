@@ -4,7 +4,7 @@ import numpy as np
 
 pygame.init()
 
-SCREEN_WIDTH = 810
+SCREEN_WIDTH = 810 # from here
 SCREEN_HEIGHT = 860
 CELL_SIZE = 90
 MAZE_WIDTH  = SCREEN_WIDTH // CELL_SIZE
@@ -14,7 +14,8 @@ BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 GRAY = (128, 128, 128)
-LIGHT_RED = (255, 100, 100)
+LIGHT_RED = (255, 100, 100) # to here is accoutned for 
+
 STATES_TO_COORDINATES = [ # y 0 is at top
       (4,3), (4,2), (4,5), (4,6), (3,4), (2,4), (5,4), (6,4), #center plus
       (3,1), (2,1), (5,1), (6,1), # top perimeter
