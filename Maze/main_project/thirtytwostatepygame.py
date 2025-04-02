@@ -5,16 +5,49 @@ from modules.mapping import STATES_TO_COORDINATES, STATES_TO_ORIENTATIONS, LEGAL
 
 pygame.init()
 
+class QLearningModel:
+    def __init__(self, n_states = 32, n_actions = 4, alpha = 0.9, # learning rate
+    gamma = 0.95, # discount factor
+    epsilon = 1.0, # exploration rate
+    epsilon_decay = 0.9995, # decay rate for epsilon
+    min_epsilon = 0.01, # minimum exploration rate
+    block_size = 32, # number of episodes to train
+    max_steps = 200 # maximum steps per episode
+    ):
+        self.action_space = [0,1,2,3] # forward, left, right, about face
+        self.n_states = n_states
+        self.n_actions = n_actions
+        self.q_table = np.zeros((n_states, n_actions))
+        self.learning_rate = alpha
+        self.exploration_probability = epsilon
+        self.epsilon_decay = 0.9995
+        self.min_epsilon = min_epsilon
+        self.block_size = block_size
+        self.max_steps = max_steps
+        self.discount_factor = gamma
+    def choose_action(self, state):
+        if random.uniform(0,1) < self.exploration_probability:
+            return random.choice(self.action_space)
+        else:
+            return np.argmax(self.q_table[state])
+    def step(self, old_state, new_state, reward):
+        action = self.choose_action(state)
+        old_value = self.q_table[old_state, action]
+        next_max = np.max(self.q_table[new_state, :])
+        self.q_table[state, action] = (1-self.learning_rate) * old_value + self.learning_rate * (reward + self.discount_factor * next_max)
+        state = new_state
+
 #further refactoring (organize file structure)
 class Environment:
     #agent, #reward, #maze
-    def __init__(self, maze_width, maze_height, goal_corner = 0, start = 0):
+    def __init__(self, maze_width, maze_height, goal_corner = 0, start = [0,1,2,3]):
         
         #maze defining
         self.maze = [[0] * maze_width for _ in range(maze_height)]
         self.maze_width = maze_width
         self.maze_height = maze_height
         self.goal_corner = goal_corner
+        self.goal_corner_state = self.identify_state(self.find_goal_corners(self.goal_corner)[0], self.find_goal_corners(self.goal_corner)[1])
 
         #write maze
         self.write_open_tiles()
@@ -23,7 +56,8 @@ class Environment:
         #trial defining
 
         #agent defining
-        self.start = random.choice([0, 1, 2, 3])
+        self.start_options = start
+        self.start = random.choice(self.start_options)
         self.configure_doors_for_goal_seeking()
         cell = self.identify_start_cell(self.start)
         self.y = cell[1]
@@ -50,11 +84,23 @@ class Environment:
             self.maze[y][self.maze_width//2] = 1
             self.maze[y][1] = 1
     
+    def find_goal_corners(self, goal_corner):
+        if goal_corner == 0:
+            return (0,0)
+        elif goal_corner == 1:
+            return (0,self.maze_width-1)
+        elif goal_corner == 2:
+            return (self.maze_height-1, self.maze_width-1)
+        elif goal_corner == 3:
+            return (self.maze_height-1, 0)
+
     def write_goals(self): #goal_corner
-        self.maze[0][0] = 2 if self.goal_corner == 0 else 3
-        self.maze[0][self.maze_width-1] = 2 if self.goal_corner == 1 else 3
-        self.maze[self.maze_height-1][0] = 2 if self.goal_corner == 3 else 3
-        self.maze[self.maze_height-1][self.maze_width-1] = 2 if self.goal_corner == 2 else 3
+        goal_corners = self.find_goal_corners(self.goal_corner)
+        self.maze[0][0] = 3
+        self.maze[0][self.maze_width-1] = 3
+        self.maze[self.maze_height-1][0] = 3
+        self.maze[self.maze_height-1][self.maze_width-1] = 3
+        self.maze[goal_corners[0]][goal_corners[1]] = 2 #goal
 
     def configure_doors_for_goal_seeking(self):
         self.potential_goal_seeking_doors = [1,9,11,3,13,15,5,17,19,7,21,23]
@@ -84,6 +130,38 @@ class Environment:
             return (self.maze_height//2, self.maze_width//2 + 1)
         elif start == 3:
             return (self.maze_height//2 - 1, self.maze_width//2)
+    
+    def move(self, move):
+        moves = [0,1,2,3]
+        self.state = self.identify_state(self.x, self.y)
+
+        # check if new state is valid
+        new_state = LEGAL_MOVEMENT[self.state-1][moves[move]] if LEGAL_MOVEMENT[self.state-1][moves[move]] != 0 else self.state
+
+        # checks if there is a door within the rectangle formed with the corners of new and current state
+        contains_door = False
+        for i in range(min(STATES_TO_COORDINATES[self.state-1][0], STATES_TO_COORDINATES[new_state-1][0]), max(STATES_TO_COORDINATES[self.state-1][0], STATES_TO_COORDINATES[new_state-1][0]) + 1):
+            for j in range(min(STATES_TO_COORDINATES[self.state-1][1], STATES_TO_COORDINATES[new_state-1][1]), max(STATES_TO_COORDINATES[self.state-1][1], STATES_TO_COORDINATES[new_state-1][1]) + 1):
+
+                if (self.maze[j][i] == 4):
+                    contains_door = True
+        if contains_door:
+            new_state = self.state
+        self.x = STATES_TO_COORDINATES[new_state-1][0]
+        self.y = STATES_TO_COORDINATES[new_state-1][1]
+        self.state = new_state
+        if self.state == self.goal_corner_state:
+            print("goal reached")
+            self.start = random.choice(self.start_options)
+            self.write_open_tiles()
+            self.configure_doors_for_goal_seeking()
+            cell = self.identify_start_cell(self.start)
+            self.y = cell[1]
+            self.x = cell[0]
+            self.state = self.identify_state(self.x, self.y)
+        self._infer_orientation()
+
+            
 
 
 class Screen:
@@ -142,31 +220,41 @@ class Screen:
         maze = env.maze
         self.draw_maze(maze, env.maze_width, env.maze_height)
         self.draw_agent(env.x, env.y, env.orientation)
+        self.draw_available_states(env.state)
 
+    def draw_available_states(self, state):
+        available_states = LEGAL_MOVEMENT[state-1]
+        for i in range(4):
+            if available_states[i] != 0:
+                pygame.draw.circle(self.screen, self.LIGHT_RED, (STATES_TO_COORDINATES[available_states[i]-1][0]*self.cell_size + (self.cell_size //2), STATES_TO_COORDINATES[available_states[i]-1][1]*self.cell_size + (self.cell_size //2),), 10)
+
+    def run(self, environment):
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.KEYDOWN:
+                    # print(model.choose_action(STATES_TO_COORDINATES.index((agent.y, agent.x))))
+                    if event.key == pygame.K_UP:
+                        environment.move(0)
+                    elif event.key == pygame.K_DOWN:
+                        environment.move(3)
+                    elif event.key == pygame.K_LEFT:
+                        environment.move(1)
+                    elif event.key == pygame.K_RIGHT:
+                        environment.move(2)
+            self.draw(environment)
+            pygame.display.flip()
         
 def main():
     screen = Screen()
     maze_width = screen.width//screen.cell_size
     maze_height = (screen.height-50)//screen.cell_size
-    environment = Environment(maze_width, maze_height)
+    environment = Environment(maze_width, maze_height, start = [0,2])
+    screen.run(environment)
+    pygame.quit()
     
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                print(model.choose_action(STATES_TO_COORDINATES.index((agent.y, agent.x))))
-            if event.key == pygame.K_UP:
-                agent.move(0, maze)
-            elif event.key == pygame.K_DOWN:
-                agent.move(3, maze)
-            elif event.key == pygame.K_LEFT:
-                agent.move(1, maze)
-            elif event.key == pygame.K_RIGHT:
-                agent.move(2, maze)
-        screen.draw(environment)
-        pygame.display.flip()
 
 
 if __name__ == "__main__":
