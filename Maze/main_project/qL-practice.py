@@ -22,7 +22,7 @@ def choose_action(state):
     return env.action_space.sample()
   else:
     return np.argmax(q_table[state])
-  
+
 
 for episode in range(num_episodes):
   state, _ = env.reset()
@@ -45,7 +45,6 @@ for episode in range(num_episodes):
     if done or truncated:
       break
     
-  epsilon = max(min_epsilon, epsilon * epsilon_decay)
 
 env = gym.make("Taxi-v3", render_mode="human")
 
