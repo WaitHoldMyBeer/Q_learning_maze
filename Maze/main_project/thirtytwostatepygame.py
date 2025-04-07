@@ -9,8 +9,8 @@ class QLearningModel:
     def __init__(self, n_states = 32, n_actions = 4, alpha = 0.9, # learning rate
     gamma = 0.95, # discount factor
     epsilon = 1.0, # exploration rate
-    epsilon_decay = 0.8, # decay rate for epsilon
-    min_epsilon = 0.01, # minimum exploration rate
+    epsilon_decay = 0.995, # decay rate for epsilon
+    min_epsilon = 0.3, # minimum exploration rate
     block_size = 32, # number of episodes to train
     max_steps = 200 # maximum steps per episode
     ):
@@ -30,21 +30,23 @@ class QLearningModel:
         if random.uniform(0,1) < self.exploration_probability:
             return random.choice(self.action_space)
         else:
-            return np.argmax(self.q_table[state])
-    def step(self, env):
-        
-        action = self.choose_action(env.state-1)
+            return np.argmax(self.q_table[state-1])
+    def step(self, env, action = None):
+        if action is None:
+            action = self.choose_action(env.state-1)
+        print("state = ", env.state-1)
+        old_state = env.state-1
         print(action)
         print("exploration rate =", self.exploration_probability)
-        old_value = self.q_table[env.state-1, action]
-        reward, new_state = env.location_move(action)
+        old_value = self.q_table[old_state, action]
+        reward, new_state = env.move(action)
 
         next_max = np.max(self.q_table[new_state-1, :])
-        self.q_table[env.state-1, action] = (1-self.learning_rate) * old_value + self.learning_rate * (reward + self.discount_factor * next_max)
+        self.q_table[old_state, action] = (1-self.learning_rate) * old_value + self.learning_rate * (reward + self.discount_factor * next_max)
         self.exploration_probability = max(self.min_epsilon, self.exploration_probability * self.epsilon_decay)
         self.cumulative_reward = self.cumulative_reward + reward
         print("cumulative_reward = ",self.cumulative_reward)
-        print(self.q_table[env.state-1, :])
+        print(f"the q_table at {old_state+1} reads {self.q_table[env.state-1, :]}")
 
 #further refactoring (organize file structure)
 class Environment:
@@ -191,7 +193,7 @@ class Environment:
             self.state = self.identify_state(self.x, self.y)
             reward = 50
         self._infer_orientation()
-        return reward, new_state            
+        return reward, new_state
 
 
 class Screen:
@@ -283,15 +285,28 @@ class Screen:
                         prediction = q_model.choose_action(environment.state)
                         self.display_text.update({"predicted state": f"{prediction}"})
                         q_model.step(environment)
+                    if event.key == pygame.K_2:
+                        for i in range(10):
+                            prediction = q_model.choose_action(environment.state)
+                            self.display_text.update({"predicted state": f"{prediction}"})
+                            q_model.step(environment)
                     # print(model.choose_action(STATES_TO_COORDINATES.index((agent.y, agent.x))))
                     if event.key == pygame.K_UP:
-                        environment.move(0)
+                        prediction = q_model.choose_action(environment.state)
+                        self.display_text.update({"predicted state": f"{prediction}"})
+                        q_model.step(environment, 0)
                     elif event.key == pygame.K_DOWN:
-                        environment.move(3)
+                        prediction = q_model.choose_action(environment.state)
+                        self.display_text.update({"predicted state": f"{prediction}"})
+                        q_model.step(environment, 3)
                     elif event.key == pygame.K_LEFT:
-                        environment.move(1)
+                        prediction = q_model.choose_action(environment.state)
+                        self.display_text.update({"predicted state": f"{prediction}"})
+                        q_model.step(environment, 1)
                     elif event.key == pygame.K_RIGHT:
-                        environment.move(2)
+                        prediction = q_model.choose_action(environment.state)
+                        self.display_text.update({"predicted state": f"{prediction}"})
+                        q_model.step(environment, 2)
             self.draw(environment)
             pygame.display.flip()
         
