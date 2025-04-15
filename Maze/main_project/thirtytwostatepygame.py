@@ -6,7 +6,7 @@ from modules.mapping import STATES_TO_COORDINATES, STATES_TO_ORIENTATIONS, LEGAL
 pygame.init()
 
 class QLearningModel:
-    def __init__(self, n_states = 32, n_actions = 4, alpha = 0.9, # learning rate
+    def __init__(self, n_states = 32, n_actions = 4, alpha = 0.1, # learning rate
     gamma = 0.95, # discount factor
     epsilon = 1.0, # exploration rate
     epsilon_decay = 0.995, # decay rate for epsilon
@@ -31,7 +31,7 @@ class QLearningModel:
             return random.choice(self.action_space)
         else:
             return np.argmax(self.q_table[state])
-    def step(self, env, action = None):
+    def step(self, env, action = None, start = None):
         self.state = env.state-1 + (32 if env.goal_seeking == False else 0)
         if action is None:
             action = self.choose_action(self.state)
@@ -40,7 +40,7 @@ class QLearningModel:
         print(action)
         print("exploration rate =", self.exploration_probability)
         old_value = self.q_table[old_state, action]
-        reward, new_state = env.move(action)
+        reward, new_state = env.move(action, start)
         self.state = new_state-1 + (32 if env.goal_seeking == False else 0)
 
         next_max = np.max(self.q_table[self.state, :])
@@ -53,7 +53,7 @@ class QLearningModel:
 #further refactoring (organize file structure)
 class Environment:
     #agent, #reward, #maze
-    def __init__(self, maze_width, maze_height, goal_corner = 1, start = [0,1,2,3]):
+    def __init__(self, maze_width, maze_height, start_state, goal_corner = 1, start = [0,1,2,3]):
         #maze defining
         self.maze = [[0] * maze_width for _ in range(maze_height)]
         self.maze_width = maze_width
@@ -65,7 +65,6 @@ class Environment:
         self.write_open_tiles()
         self.write_goals()
         self.return_cell = "none"
-
         #self doors
         self.potential_doors = {
             "middle": (self.maze_height // 2, self.maze_width //2),
@@ -79,20 +78,25 @@ class Environment:
             7: (self.maze_height // 2, self.maze_width //2 + 1),
         }
         #trial defining
-
-        #agent defining
         self.start_options = start
-        self.start = random.choice(self.start_options)
+        data_to_start = [2,8,4,6]
+        #agent defining
+        if start_state:
+            self.start = data_to_start.index(start_state)
+            self.state = start_state
+            self.x = STATES_TO_COORDINATES[self.state-1][0]
+            self.y = STATES_TO_COORDINATES[self.state-1][1]
+        else:
+            self.start = random.choice(self.start_options)
+            self.start_cell = self.identify_start_cell(self.start)
+            self.start_state = self.identify_state(self.start_cell[0], self.start_cell[1])
+            cell = self.start_cell
+            self.y = cell[1]
+            self.x = cell[0]
+            print("x = ", self.x, "y =", self.y)
+            self.state = self.identify_state(self.x, self.y)
         self.configure_doors_for_goal_seeking()
-        self.start_cell = self.identify_start_cell(self.start)
-        self.start_state = self.identify_state(self.start_cell[0], self.start_cell[1])
-        cell = self.start_cell
-        self.y = cell[1]
-        self.x = cell[0]
-        print("x = ", self.x, "y =", self.y)
-        self.state = self.identify_state(self.x, self.y)
         self._infer_orientation()
-        print(self.start)
 
     def _infer_orientation(self): # left = 0, right = 1
         self.orientation = STATES_TO_ORIENTATIONS[self.state-1]
@@ -172,13 +176,13 @@ class Environment:
 
     def identify_start_cell(self, start):
         if start == 0:
-            return (self.maze_height//2, self.maze_width//2 - 1)
+            return (self.maze_height//2, self.maze_width//2 - 2)
         elif start == 1:
-            return (self.maze_height//2 + 1, self.maze_width//2)
+            return (self.maze_height//2 + 2, self.maze_width//2)
         elif start == 2:
-            return (self.maze_height//2, self.maze_width//2 + 1)
+            return (self.maze_height//2, self.maze_width//2 + 2)
         elif start == 3:
-            return (self.maze_height//2 - 1, self.maze_width//2)
+            return (self.maze_height//2 - 2, self.maze_width//2)
     
     def location_move(self, move):
         moves = [0,1,2,3]
@@ -232,9 +236,14 @@ class Environment:
             self.maze[STATES_TO_COORDINATES[17-1][1]][STATES_TO_COORDINATES[17-1][0]] = 4
 
 
-    def start_return(self):
-        print("goal reached")
-        self.start = random.choice(self.start_options)
+    def start_return(self, start = None):
+        print("goal reached, start is " + str(start))
+        data_to_start = [2,8,4,6]
+        if start is not None:
+            self.start = data_to_start.index(start)
+            print("start is",self.start)
+        else:
+            self.start = random.choice(self.start_options)
         self.start_cell = self.identify_start_cell(self.start)
         self.start_state = self.identify_state(self.start_cell[0], self.start_cell[1])
         if self.goal_corner == 0:
@@ -251,7 +260,7 @@ class Environment:
         self.write_open_tiles()
         self.configure_doors_for_return()
 
-    def move(self, move):
+    def move(self, move, start = None):
         moves = [0,1,2,3]
         self.state = self.identify_state(self.x, self.y)
 
@@ -273,16 +282,16 @@ class Environment:
         if self.goal_seeking == True:
             if self.state == self.goal_corner_state:
                 reward = 50
-                self.start_return()
+                self.start_return(start)
         elif self.goal_seeking == False:
             if self.return_cell == "distal":
                 if self.state == 20:
                     self.configure_doors_for_return_2("left")
                 if self.state == 24:
                     self.configure_doors_for_return_2("right")
-            if self.state == self.start_state:
+            if self.state == self.start_state-1:
                 self.configure_doors_for_return_3()
-            if self.state == self.start_state+1:
+            if self.state == self.start_state:
                 self.configure_doors_for_goal_seeking()
                 self.goal_seeking = True
         self._infer_orientation()
