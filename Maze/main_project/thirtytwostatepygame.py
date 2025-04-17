@@ -10,7 +10,7 @@ class QLearningModel:
     gamma = 0.95, # discount factor
     epsilon = 1.0, # exploration rate
     epsilon_decay = 0.995, # decay rate for epsilon
-    min_epsilon = 0.3, # minimum exploration rate
+    min_epsilon = 0.1, # minimum exploration rate
     block_size = 32, # number of episodes to train
     max_steps = 200 # maximum steps per episode
     ):
@@ -35,10 +35,10 @@ class QLearningModel:
         self.state = env.state-1 + (32 if env.goal_seeking == False else 0)
         if action is None:
             action = self.choose_action(self.state)
-        print("state = ", self.state)
+        #print("state = ", self.state)
         old_state = self.state
-        print(action)
-        print("exploration rate =", self.exploration_probability)
+        #print(action)
+        #print("exploration rate =", self.exploration_probability)
         old_value = self.q_table[old_state, action]
         reward, new_state = env.move(action, start)
         self.state = new_state-1 + (32 if env.goal_seeking == False else 0)
@@ -47,8 +47,8 @@ class QLearningModel:
         self.q_table[old_state, action] = (1-self.learning_rate) * old_value + self.learning_rate * (reward + self.discount_factor * next_max)
         self.exploration_probability = max(self.min_epsilon, self.exploration_probability * self.epsilon_decay)
         self.cumulative_reward = self.cumulative_reward + reward
-        print("cumulative_reward = ",self.cumulative_reward)
-        print(f"the q_table at {old_state+1} reads {self.q_table[self.state, :]}")
+        #print("cumulative_reward = ",self.cumulative_reward)
+        #print(f"the q_table at {old_state+1} reads {self.q_table[self.state, :]}")
 
 #further refactoring (organize file structure)
 class Environment:
@@ -93,8 +93,27 @@ class Environment:
             cell = self.start_cell
             self.y = cell[1]
             self.x = cell[0]
-            print("x = ", self.x, "y =", self.y)
+            #print("x = ", self.x, "y =", self.y)
             self.state = self.identify_state(self.x, self.y)
+        self.configure_doors_for_goal_seeking()
+        self._infer_orientation()
+
+    def full_reset(self, start_state):
+        """Complete reset of environment state"""
+        data_to_start = [2,8,4,6]
+        
+        # Reset agent position
+        if start_state:
+            self.start = data_to_start.index(start_state)
+            self.state = start_state
+            self.x = STATES_TO_COORDINATES[self.state-1][0]
+            self.y = STATES_TO_COORDINATES[self.state-1][1]
+        
+        # Reset goal seeking state
+        self.goal_seeking = True
+        self.return_cell = "none"
+        
+        # Reset doors and orientation
         self.configure_doors_for_goal_seeking()
         self._infer_orientation()
 
@@ -201,7 +220,7 @@ class Environment:
             new_state = self.state
         reward = -1
         if new_state == self.goal_corner_state:
-            print("hypothetical goal reached")
+            #print("hypothetical goal reached")
             reward = 50
         return reward, new_state  
 
@@ -237,11 +256,11 @@ class Environment:
 
 
     def start_return(self, start = None):
-        print("goal reached, start is " + str(start))
+        #print("goal reached, start is " + str(start))
         data_to_start = [2,8,4,6]
         if start is not None:
             self.start = data_to_start.index(start)
-            print("start is",self.start)
+            #print("start is",self.start)
         else:
             self.start = random.choice(self.start_options)
         self.start_cell = self.identify_start_cell(self.start)
@@ -393,7 +412,7 @@ class Screen:
                             prediction = q_model.choose_action(environment.state)
                             self.display_text.update({"predicted state": f"{prediction}"})
                             q_model.step(environment)
-                    # print(model.choose_action(STATES_TO_COORDINATES.index((agent.y, agent.x))))
+                    # #print(model.choose_action(STATES_TO_COORDINATES.index((agent.y, agent.x))))
                     if event.key == pygame.K_UP:
                         prediction = q_model.choose_action(environment.state)
                         self.display_text.update({"predicted state": f"{prediction}"})
