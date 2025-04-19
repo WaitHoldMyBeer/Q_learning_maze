@@ -7,7 +7,7 @@ pygame.init()
 
 class QLearningModel:
     def __init__(self, n_states = 32, n_actions = 4, alpha = 0.1, # learning rate
-    gamma = 0.95, # discount factor
+    gamma = 0.8, # discount factor
     epsilon = 1.0, # exploration rate
     epsilon_decay = 0.995, # decay rate for epsilon
     min_epsilon = 0.1, # minimum exploration rate
@@ -47,6 +47,7 @@ class QLearningModel:
         self.q_table[old_state, action] = (1-self.learning_rate) * old_value + self.learning_rate * (reward + self.discount_factor * next_max)
         self.exploration_probability = max(self.min_epsilon, self.exploration_probability * self.epsilon_decay)
         self.cumulative_reward = self.cumulative_reward + reward
+        return action
         #print("cumulative_reward = ",self.cumulative_reward)
         #print(f"the q_table at {old_state+1} reads {self.q_table[self.state, :]}")
 
