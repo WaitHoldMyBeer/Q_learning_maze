@@ -54,9 +54,10 @@ def q_model():
     
     # Load and filter rat data from CSV
     rat_data = pd.read_csv("modules/rat1_data.csv")
+    rat_data_session_12 = rat_data[(rat_data["Session"] == 12)]
     #final_session = 8
     #rat_data = rat_data[(rat_data["Session"] >= 1) & (rat_data["Session"] <= int(final_session))]
-    rat_data = rat_data[(rat_data["Session"] >= 1) & (rat_data["Session"] <= int(8))]
+    rat_data = rat_data[((rat_data["Session"] >= 1) & (rat_data["Session"] <= 8))]
 
     #np.convolve(ndarray, np.ones(size)/size, mode = "full")
 
@@ -136,7 +137,7 @@ def q_model():
             #get model prediction
         prediction = q_model.choose_action(environment.state-1)
         
-        print(f"CSV state = {state}. Environment state = {environment.state}. Rat action = {action}. Q Model action = {prediction}")
+        # print(f"CSV state = {state}. Environment state = {environment.state}. Rat action = {action}. Q Model action = {prediction}")
 
         # Determine expected actions based on start position
         expected_first = 1 if start == 2 else 2  # left or right
@@ -189,6 +190,67 @@ def q_model():
         # Take step using the rat's action
         #
         q_model.step(environment, start=next_start)
+
+
+
+    # session 12 data
+    session_12_indexer = 0
+    q_model_trial = 0
+    environment = Environment(maze_width, maze_height, rat_data.iloc[0]["State"], goal_corner = 3, start=[0,2])
+
+    while session_12_indexer < len(rat_data_session_12)-1:
+        print("Test")
+        session = rat_data_session_12.iloc[session_12_indexer]['Session']
+        state = rat_data_session_12.iloc[session_12_indexer]['State']
+        action = rat_data_session_12.iloc[session_12_indexer]['Action']
+        trial = rat_data_session_12.iloc[session_12_indexer]['Trial']
+        start = rat_data_session_12.iloc[session_12_indexer]['Start']
+        
+        current_trial = int(abs(trial))
+        previous_trial = int(abs(previous_trial))
+        
+        
+        expected_first = 1 if start == 2 else 2
+        expected_second = 1
+
+        if (current_trial != previous_trial):
+            environment.full_reset(start_state=rat_data_session_12.iloc[session_12_indexer]['State'])
+            correctness_index = 0
+            environment.goal_seeking = True
+            
+            # q_model trial runs
+            while True:
+                print("Q Model Trial", q_model_trial)
+                q_action = q_model.step(environment)
+                
+                if correctness_index == 1:
+                    q_model_first_correct = (q_action == expected_first)
+                    q_model_first_turn.append(q_action == 1)
+                if correctness_index == 2:
+                    q_model_second_correct = (q_action == expected_second)
+                    if q_model_first_correct and q_model_second_correct:
+                        q_model_correct = 1
+                    q_model_correct_arr.append(q_model_correct)
+                    q_model_second_turn.append(q_action == 1)
+                if (environment.state == environment.goal_corner_state):
+                    break
+                correctness_index += 1
+            correctness_index = 0
+
+        if correctness_index == 1:
+            rat_first_correct = (action == expected_first)
+            rat_first_turn.append(action-2)
+        elif correctness_index == 2:
+            rat_second_correct = (action == expected_second)
+            rat_second_turn.append(action-2)
+            rat_data_correct = 0
+            if rat_first_correct and rat_second_correct:
+                rat_data_correct = 1
+            rat_data_correct_arr.append(rat_data_correct)
+        previous_trial = trial
+        correctness_index += 1
+        session_12_indexer += 1
+
 
     q_model_correct_arr = np.array(q_model_correct_arr)
     rat_data_correct_arr = np.array(rat_data_correct_arr)

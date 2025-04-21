@@ -10,7 +10,7 @@ class QLearningModel:
     gamma = 0.8, # discount factor
     epsilon = 1.0, # exploration rate
     epsilon_decay = 0.995, # decay rate for epsilon
-    min_epsilon = 0.1, # minimum exploration rate
+    min_epsilon = 0.3, # minimum exploration rate
     block_size = 32, # number of episodes to train
     max_steps = 200 # maximum steps per episode
     ):
@@ -54,7 +54,7 @@ class QLearningModel:
 #further refactoring (organize file structure)
 class Environment:
     #agent, #reward, #maze
-    def __init__(self, maze_width, maze_height, start_state, goal_corner = 1, start = [0,1,2,3]):
+    def __init__(self, maze_width, maze_height, start_state = None, goal_corner = 1, start = [0,1,2,3]):
         #maze defining
         self.maze = [[0] * maze_width for _ in range(maze_height)]
         self.maze_width = maze_width
@@ -193,6 +193,16 @@ class Environment:
                 self.maze[STATES_TO_COORDINATES[8-1][1]][STATES_TO_COORDINATES[8-1][0]] = 4
                 self.maze[STATES_TO_COORDINATES[6-1][1]][STATES_TO_COORDINATES[6-1][0]] = 4
                 self.maze[self.potential_doors["middle"][1]][self.potential_doors["middle"][0]] = 4
+        if self.goal_corner == 3:
+            if self.start == 2:
+                self.maze[STATES_TO_COORDINATES[17-1][1]][STATES_TO_COORDINATES[17-1][0]] = 4
+                self.maze[STATES_TO_COORDINATES[15-1][1]][STATES_TO_COORDINATES[15-1][0]] = 4
+                self.maze[self.potential_doors["middle"][1]][self.potential_doors["middle"][0]] = 4
+            elif self.start == 0:
+                self.maze[STATES_TO_COORDINATES[4-1][1]][STATES_TO_COORDINATES[4-1][0]] = 4
+                self.maze[STATES_TO_COORDINATES[8-1][1]][STATES_TO_COORDINATES[8-1][0]] = 4
+                self.maze[STATES_TO_COORDINATES[6-1][1]][STATES_TO_COORDINATES[6-1][0]] = 4
+                self.maze[self.potential_doors["middle"][1]][self.potential_doors["middle"][0]] = 4
 
     def identify_start_cell(self, start):
         if start == 0:
@@ -228,13 +238,18 @@ class Environment:
     def configure_doors_for_return_2(self, side):
         self.write_open_tiles()
         if side == "left":
+            door_three = 15 if self.goal_corner == 0 or self.goal_corner == 1 else 11
             self.maze[self.potential_doors["left"][0]][self.potential_doors["left"][1]] = 4
             self.maze[self.potential_doors["middle"][1]][self.potential_doors["middle"][0]] = 4
-            self.maze[STATES_TO_COORDINATES[15-1][1]][STATES_TO_COORDINATES[15-1][0]] = 4
+            self.maze[STATES_TO_COORDINATES[door_three-1][1]][STATES_TO_COORDINATES[door_three-1][0]] = 4
         elif side == "right":
             self.maze[self.potential_doors["right"][0]][self.potential_doors["right"][1]] = 4
             self.maze[self.potential_doors["middle"][1]][self.potential_doors["middle"][0]] = 4
-            self.maze[STATES_TO_COORDINATES[13-1][1]][STATES_TO_COORDINATES[13-1][0]] = 4
+            if self.goal_corner == 0 or self.goal_corner == 1:
+                self.maze[STATES_TO_COORDINATES[13-1][1]][STATES_TO_COORDINATES[13-1][0]] = 4
+            else:
+                self.maze[STATES_TO_COORDINATES[9-1][1]][STATES_TO_COORDINATES[9-1][0]] = 4
+                
 
     def configure_doors_for_return_3(self):
         self.write_open_tiles()
@@ -267,15 +282,15 @@ class Environment:
         self.start_cell = self.identify_start_cell(self.start)
         self.start_state = self.identify_state(self.start_cell[0], self.start_cell[1])
         if self.goal_corner == 0:
-            if self.start == 0:
-                self.return_cell = "proximal"
             if self.start == 2:
                 self.return_cell = "distal"
         elif self.goal_corner == 1:
-            if self.start == 0:
-                self.return_cell = "proximal"
             if self.start == 2:
                 self.return_cell = "distal"
+        elif self.goal_corner == 3:
+            
+            if self.start == 0:
+                self.return_cell = "proximal"
         self.goal_seeking = False
         self.write_open_tiles()
         self.configure_doors_for_return()
@@ -308,6 +323,11 @@ class Environment:
                 if self.state == 20:
                     self.configure_doors_for_return_2("left")
                 if self.state == 24:
+                    self.configure_doors_for_return_2("right")
+            if self.return_cell == "proximal":
+                if self.state == 18:
+                    self.configure_doors_for_return_2("left")
+                if self.state == 22:
                     self.configure_doors_for_return_2("right")
             if self.state == self.start_state-1:
                 self.configure_doors_for_return_3()
