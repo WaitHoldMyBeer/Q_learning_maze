@@ -10,7 +10,7 @@ class QLearningModel:
     gamma = 0.8, # discount factor
     epsilon = 1.0, # exploration rate
     epsilon_decay = 0.995, # decay rate for epsilon
-    min_epsilon = 0.3, # minimum exploration rate
+    min_epsilon = 0.1, # minimum exploration rate
     block_size = 32, # number of episodes to train
     max_steps = 200 # maximum steps per episode
     ):
@@ -47,7 +47,7 @@ class QLearningModel:
         self.q_table[old_state, action] = (1-self.learning_rate) * old_value + self.learning_rate * (reward + self.discount_factor * next_max)
         self.exploration_probability = max(self.min_epsilon, self.exploration_probability * self.epsilon_decay)
         self.cumulative_reward = self.cumulative_reward + reward
-        return action
+        return action, reward
         #print("cumulative_reward = ",self.cumulative_reward)
         #print(f"the q_table at {old_state+1} reads {self.q_table[self.state, :]}")
 
@@ -348,11 +348,10 @@ class Screen:
         self.WHITE = (255, 255, 255)
         self.BLACK = (0, 0, 0)
         self.GREEN = (0, 255, 0)
-        self.RED = (255, 0, 0)
         self.GRAY = (128, 128, 128)
         self.LIGHT_RED = (255, 100, 100)
         self.BLUE = (0,0,255)
-
+        
         #pygame
         self.screen = pygame.display.set_mode((self.width, self.height))
         self.display_text = {}
@@ -373,7 +372,12 @@ class Screen:
                 elif maze[y][x] == 4: # door
                     pygame.draw.rect(self.screen, self.BLUE, (x*self.cell_size, y*self.cell_size, self.cell_size, self.cell_size))
 
-    def draw_agent(self, x, y, orientation):
+    def draw_agent(self, x, y, orientation, agent_color = "RED"):
+        agent_colors = {
+            "RED": (255, 0, 0),
+            "YELLOW": (255, 255, 0),
+        }
+        self.agent_color = agent_colors[agent_color]
         direction_points = [
         (x * self.cell_size + self.cell_size, y * self.cell_size + self.cell_size),  # bottom right
         (x * self.cell_size, y * self.cell_size + self.cell_size),  # bottom left
@@ -391,7 +395,7 @@ class Screen:
         self.display_text.update({"Location ": f"({x}, {y})"})
         
         # self.screen.blit(text, (300, 10))
-        pygame.draw.polygon(self.screen, self.RED, [direction_points[orientation % 4], direction_points[(orientation+1)%4],direction_points[4+(orientation)%4]])
+        pygame.draw.polygon(self.screen, self.agent_color, [direction_points[orientation % 4], direction_points[(orientation+1)%4],direction_points[4+(orientation)%4]])
 
     def draw_text(self):
         final_render = ""

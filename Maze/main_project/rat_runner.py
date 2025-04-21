@@ -48,16 +48,18 @@ def main():
         random.seed(40+i)
         total+=q_model()
     print("Average Mean squared loss =", total/10)
-        
 
 def q_model():
     
     # Load and filter rat data from CSV
     rat_data = pd.read_csv("modules/rat1_data.csv")
-    rat_data_session_12 = rat_data[(rat_data["Session"] == 12)]
+    rat_data_session_12 = rat_data[(rat_data["Session"] == 12) & (abs(rat_data["Trial"]) > 16)]
     #final_session = 8
     #rat_data = rat_data[(rat_data["Session"] >= 1) & (rat_data["Session"] <= int(final_session))]
-    rat_data = rat_data[((rat_data["Session"] >= 1) & (rat_data["Session"] <= 8))]
+    rat_data = rat_data[(((rat_data["Session"] >= 1) & (rat_data["Session"] <= 8)) | 
+                         #(rat_data["Session"] == 12)
+                        ((rat_data["Session"] == 12) & (abs(rat_data["Trial"]) <= 16))
+                        )]
 
     #np.convolve(ndarray, np.ones(size)/size, mode = "full")
 
@@ -96,6 +98,7 @@ def q_model():
 
     # Process all data
     for index in range(len(rat_data)-1):
+
         session = rat_data.iloc[index]['Session']
         state = rat_data.iloc[index]['State']
         action = rat_data.iloc[index]['Action']
@@ -110,6 +113,7 @@ def q_model():
 
         # Reset on new trial or session
         if (current_trial != previous_trial) or (previous_session != session):
+            print("Trial =", trial)
             correctness_index = 0
             environment.full_reset(start_state=state)
             # Ensure goal_seeking is set correctly at start of trial
@@ -134,10 +138,11 @@ def q_model():
         
         
 
-            #get model prediction
+        #get model prediction
         prediction = q_model.choose_action(environment.state-1)
         
-        # print(f"CSV state = {state}. Environment state = {environment.state}. Rat action = {action}. Q Model action = {prediction}")
+
+        print(f"CSV state = {state}. Environment state = {environment.state}. Rat action = {action}. Q Model action = {prediction}")
 
         # Determine expected actions based on start position
         expected_first = 1 if start == 2 else 2  # left or right
@@ -191,15 +196,15 @@ def q_model():
         #
         q_model.step(environment, start=next_start)
 
-
+    acquisition_trials_num = len(q_model_correct_arr)
 
     # session 12 data
     session_12_indexer = 0
     q_model_trial = 0
     environment = Environment(maze_width, maze_height, rat_data.iloc[0]["State"], goal_corner = 3, start=[0,2])
-
+    total_reward = 0
     while session_12_indexer < len(rat_data_session_12)-1:
-        print("Test")
+        
         session = rat_data_session_12.iloc[session_12_indexer]['Session']
         state = rat_data_session_12.iloc[session_12_indexer]['State']
         action = rat_data_session_12.iloc[session_12_indexer]['Action']
@@ -210,19 +215,21 @@ def q_model():
         previous_trial = int(abs(previous_trial))
         
         
-        expected_first = 1 if start == 2 else 2
+        expected_first = 1 if start == 2 else 2  # left or right
         expected_second = 1
 
         if (current_trial != previous_trial):
             environment.full_reset(start_state=rat_data_session_12.iloc[session_12_indexer]['State'])
             correctness_index = 0
             environment.goal_seeking = True
-            
+            print("Q Model Trial")
+
+
             # q_model trial runs
             while True:
-                print("Q Model Trial", q_model_trial)
-                q_action = q_model.step(environment)
-                
+                q_action, reward = q_model.step(environment, start = start)
+                total_reward += reward
+                print("Q action =", q_action, "Reward = ", reward, "Cumulative Reward =", total_reward, "Start =", start, "State =", environment.state)
                 if correctness_index == 1:
                     q_model_first_correct = (q_action == expected_first)
                     q_model_first_turn.append(q_action == 1)
@@ -236,6 +243,7 @@ def q_model():
                     break
                 correctness_index += 1
             correctness_index = 0
+            q_model_trial+=1
 
         if correctness_index == 1:
             rat_first_correct = (action == expected_first)
@@ -275,7 +283,6 @@ def q_model():
     total_error = 0
     for i in range(len(rat_rolling_average)):
         total_error += (rat_rolling_average[i]-q_model_rolling_average[i])**2
-    print("Mean Squared Error =", total_error/len(rat_rolling_average))
 
     #return total_error/len(rat_rolling_average)
 
@@ -287,6 +294,7 @@ def q_model():
         plt.plot(x_axis, rat_rolling_average, marker="o", linestyle="-", color = "blue", label = "Rat Rolling Average")
         plt.plot(x_axis, q_model_rolling_average, marker="o", linestyle="-", color = "red", label = "Q Model's Rolling Average")
         plt.xlabel("Trial Index")
+        plt.axvline(x=acquisition_trials_num, color="green", linestyle="--", label="Session 12")
         plt.ylabel("Percentage Correct")
         plt.title("Rat Performance Over Trials")
         plt.xticks(x_axis, [f"Trial {i}" for i in range(len(rat_rolling_average))])
