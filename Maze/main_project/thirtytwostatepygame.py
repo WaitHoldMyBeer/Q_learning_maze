@@ -8,12 +8,16 @@ pygame.init()
 class QLearningModel:
     def __init__(self, n_states = 32, n_actions = 4, alpha = 0.1, # learning rate
     gamma = 0.8, # discount factor
-    epsilon = 1.0, # exploration rate
+    epsilon = .1, # exploration rate
     epsilon_decay = 0.995, # decay rate for epsilon
-    min_epsilon = 0.1, # minimum exploration rate
+    min_epsilon = .8, # minimum exploration rate
     block_size = 32, # number of episodes to train
-    max_steps = 200 # maximum steps per episode
+    max_steps = 200, # maximum steps per episode
+    reward_size = 50,
+    soft_max = False,
+    temperature = 1,
     ):
+
         self.action_space = [0,1,2,3] # forward, left, right, about face
         self.n_states = n_states
         self.n_actions = n_actions
@@ -26,11 +30,27 @@ class QLearningModel:
         self.max_steps = max_steps
         self.discount_factor = gamma
         self.cumulative_reward = 0
+        self.reward_size = reward_size
+        self.softmax = soft_max
+        self.temperature = temperature
+
     def choose_action(self, state):
-        if random.uniform(0,1) < self.exploration_probability:
-            return random.choice(self.action_space)
+        if self.softmax == False:
+            if random.uniform(0,1) < self.exploration_probability:
+                return random.choice(self.action_space)
+            else:
+                return np.argmax(self.q_table[state])
         else:
-            return np.argmax(self.q_table[state])
+            args = self.q_table[state].astype(np.float64)
+            
+            prefs = args / self.temperature
+
+            prefs -= np.max(prefs)
+            exp_prefs = np.exp(prefs)
+            probs = exp_prefs / np.sum(exp_prefs)
+
+            return int(np.random.choice(self.action_space, p=probs))
+
     def step(self, env, action = None, start = None):
         self.state = env.state-1 + (32 if env.goal_seeking == False else 0)
         if action is None:
@@ -40,7 +60,10 @@ class QLearningModel:
         #print(action)
         #print("exploration rate =", self.exploration_probability)
         old_value = self.q_table[old_state, action]
-        reward, new_state = env.move(action, start)
+        env_reward, new_state = env.move(action, start)
+        reward = -1
+        if env_reward == True:
+            reward = self.reward_size
         self.state = new_state-1 + (32 if env.goal_seeking == False else 0)
 
         next_max = np.max(self.q_table[self.state, :])
@@ -229,10 +252,10 @@ class Environment:
                     contains_door = True
         if contains_door:
             new_state = self.state
-        reward = -1
+        reward = False
         if new_state == self.goal_corner_state:
             #print("hypothetical goal reached")
-            reward = 50
+            reward = True
         return reward, new_state  
 
     def configure_doors_for_return_2(self, side):
@@ -313,10 +336,10 @@ class Environment:
         self.x = STATES_TO_COORDINATES[new_state-1][0]
         self.y = STATES_TO_COORDINATES[new_state-1][1]
         self.state = new_state
-        reward = -1
+        reward = False
         if self.goal_seeking == True:
             if self.state == self.goal_corner_state:
-                reward = 50
+                reward = True
                 self.start_return(start)
         elif self.goal_seeking == False:
             if self.return_cell == "distal":

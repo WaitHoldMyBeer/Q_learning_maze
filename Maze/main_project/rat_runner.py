@@ -47,7 +47,7 @@ def main():
         np.random.seed(40+i)
         random.seed(40+i)
         total+=q_model()
-    print("Average Mean squared loss =", total/10)
+    #print("Average Mean squared loss =", total/10)
 
 def q_model():
     
@@ -66,21 +66,22 @@ def q_model():
 
     q_model_correct_arr = []
     rat_data_correct_arr = []
-    q_model_first_correct_arr = []
-    rat_data_first_correct_arr = []
-    q_model_second_correct_arr = []
-    rat_data_second_correct_arr = []
     rat_first_turn = []
     rat_second_turn = []
     q_model_first_turn = []
     q_model_second_turn = []
+    q_model_first_turn_values_north = []
+    q_model_first_turn_values_south = []
+    q_model_second_turn_values_left = []
+    q_model_second_turn_values_right = []
 
+    reward_size = 10
     # Initialize environment and model
     screen = Screen()
     maze_width = screen.width//screen.cell_size
     maze_height = (screen.height-50)//screen.cell_size
     environment = Environment(maze_width, maze_height, rat_data.iloc[0]["State"], start=[0,2])
-    q_model = QLearningModel()
+    q_model = QLearningModel(soft_max=True, reward_size = reward_size)
 
     # Tracking variables
     previous_session = 1
@@ -106,14 +107,13 @@ def q_model():
         start = rat_data.iloc[index]['Start']
         
         current_trial = int(abs(trial))
-        previous_trial = int(abs(previous_trial))
 
         q_model_correct = 0
         rat_data_correct = 0
 
         # Reset on new trial or session
         if (current_trial != previous_trial) or (previous_session != session):
-            print("Trial =", trial)
+            #print("Trial =", trial)
             correctness_index = 0
             environment.full_reset(start_state=state)
             # Ensure goal_seeking is set correctly at start of trial
@@ -142,7 +142,7 @@ def q_model():
         prediction = q_model.choose_action(environment.state-1)
         
 
-        print(f"CSV state = {state}. Environment state = {environment.state}. Rat action = {action}. Q Model action = {prediction}")
+        #print(f"CSV state = {state}. Environment state = {environment.state}. Rat action = {action}. Q Model action = {prediction}")
 
         # Determine expected actions based on start position
         expected_first = 1 if start == 2 else 2  # left or right
@@ -154,9 +154,12 @@ def q_model():
             rat_first_correct = (action == expected_first)
             rat_first_turn.append(action-2)
             q_model_first_turn.append(prediction == 1)
-
+            q_model_first_turn_values_north.append(q_model.q_table[1-1,:].copy())
+            q_model_first_turn_values_south.append(q_model.q_table[3-1,:].copy())
 
         elif correctness_index == 2:
+            if state == 6:
+                expected_second = 3
             q_model_second_correct = (prediction == expected_second)
             rat_second_correct = (action == expected_second)
             if q_model_first_correct and q_model_second_correct:
@@ -167,14 +170,10 @@ def q_model():
             rat_data_total += 1
             q_model_correct_arr.append(q_model_correct)
             rat_data_correct_arr.append(rat_data_correct)
-            q_model_first_correct_arr.append(q_model_first_correct)
-            rat_data_first_correct_arr.append(rat_first_correct)
-            q_model_second_correct_arr.append(q_model_second_correct)
-            rat_data_second_correct_arr.append(rat_second_correct)
             rat_second_turn.append(state-2)
             q_model_second_turn.append(prediction == 1)
-            
-        
+            q_model_second_turn_values_left.append(q_model.q_table[6-1,:].copy())
+            q_model_second_turn_values_right.append(q_model.q_table[8-1,:].copy())
 
         # Take step based on rat's actual action
         next_start = rat_data.iloc[index + 1]['Start'] if index + 1 < len(rat_data) else None
@@ -188,13 +187,13 @@ def q_model():
                 force_state = True
                 
         # Update tracking variables
-        previous_trial = trial
+        previous_trial = current_trial
         previous_session = session
         correctness_index += 1
         
         # Take step using the rat's action
         #
-        q_model.step(environment, start=next_start)
+        q_model.step(environment, action = action, start=next_start)
 
     acquisition_trials_num = len(q_model_correct_arr)
 
@@ -222,23 +221,27 @@ def q_model():
             environment.full_reset(start_state=rat_data_session_12.iloc[session_12_indexer]['State'])
             correctness_index = 0
             environment.goal_seeking = True
-            print("Q Model Trial")
-
+            #print("Q Model Trial")
 
             # q_model trial runs
             while True:
                 q_action, reward = q_model.step(environment, start = start)
                 total_reward += reward
-                print("Q action =", q_action, "Reward = ", reward, "Cumulative Reward =", total_reward, "Start =", start, "State =", environment.state)
+                #print("Q action =", q_action, "Reward = ", reward, "Cumulative Reward =", total_reward, "Start =", start, "State =", environment.state, "correctness_index =", correctness_index, "expected first?:", (q_action == expected_first))
                 if correctness_index == 1:
                     q_model_first_correct = (q_action == expected_first)
                     q_model_first_turn.append(q_action == 1)
+                    q_model_first_turn_values_north.append(q_model.q_table[1-1, :].copy())
+                    q_model_first_turn_values_south.append(q_model.q_table[3-1,:].copy())
                 if correctness_index == 2:
                     q_model_second_correct = (q_action == expected_second)
+                    q_model_correct = 0
                     if q_model_first_correct and q_model_second_correct:
                         q_model_correct = 1
                     q_model_correct_arr.append(q_model_correct)
                     q_model_second_turn.append(q_action == 1)
+                    q_model_second_turn_values_left.append(q_model.q_table[6-1,:].copy())
+                    q_model_second_turn_values_right.append(q_model.q_table[8-1,:].copy())
                 if (environment.state == environment.goal_corner_state):
                     break
                 correctness_index += 1
@@ -262,23 +265,25 @@ def q_model():
 
     q_model_correct_arr = np.array(q_model_correct_arr)
     rat_data_correct_arr = np.array(rat_data_correct_arr)
-    q_model_first_correct_arr = np.array(q_model_first_correct_arr)
-    rat_data_first_correct_arr = np.array(rat_data_first_correct_arr)
-    q_model_second_correct_arr = np.array(q_model_second_correct_arr)
-    rat_data_second_correct_arr = np.array(rat_data_second_correct_arr)
-    q_model_first_and_second_correct = np.vstack([q_model_first_correct_arr, q_model_second_correct_arr])
     q_model_first_second_turn = np.vstack([q_model_first_turn, q_model_second_turn])
     rat_first_second_turn = np.vstack([rat_first_turn, rat_second_turn])
+    q_model_first_turn_values_north = np.array(q_model_first_turn_values_north)
+    q_model_first_turn_values_south = np.array(q_model_first_turn_values_south)
+    q_model_second_turn_values_left = np.array(q_model_second_turn_values_left)
+    q_model_second_turn_values_right = np.array(q_model_second_turn_values_right)
 
 
-    rat_data_first_and_second_correct = np.vstack([rat_data_first_correct_arr, rat_data_second_correct_arr])
     q_model_entropy = sliding_window_entropy(q_model_first_second_turn)
     rat_data_entropy = sliding_window_entropy(rat_first_second_turn)
 
 
     window = 8
-    rat_rolling_average = np.convolve(rat_data_correct_arr, np.ones(window)/window, mode="valid")
-    q_model_rolling_average = np.convolve(q_model_correct_arr, np.ones(window)/window, mode="valid")
+    og_convolver = np.ones(window)/window
+    convolver_len = 2*window-1
+    convolver = np.zeros(2*window-1)
+    convolver[:window] = 15/8
+    rat_rolling_average = np.convolve(rat_data_correct_arr, convolver/convolver_len, mode="full")
+    q_model_rolling_average = np.convolve(q_model_correct_arr, convolver/convolver_len, mode="full")
     
     total_error = 0
     for i in range(len(rat_rolling_average)):
@@ -286,30 +291,91 @@ def q_model():
 
     #return total_error/len(rat_rolling_average)
 
-    x_axis = np.arange(0, len(rat_rolling_average), 1)
+    rolling_avg_len = len(rat_rolling_average)
+    q_values_len = len(q_model_first_turn_values_north)
+    entropy_len = len(q_model_entropy)
+
+    # Create separate x-axes for different plot types
+    rolling_x = np.arange(rolling_avg_len)
+    q_values_x = np.arange(q_values_len)
+    entropy_x = np.arange(entropy_len)
+    q_values_height = reward_size
+    q_values_floor = -3
     def display_figure():
-        plt.figure(figsize=(10, 6))
-        plt.subplot(211)
-        plt.axis((1,9,0,1))
-        plt.plot(x_axis, rat_rolling_average, marker="o", linestyle="-", color = "blue", label = "Rat Rolling Average")
-        plt.plot(x_axis, q_model_rolling_average, marker="o", linestyle="-", color = "red", label = "Q Model's Rolling Average")
+        plt.figure(figsize=(12, 8))
+        
+        # First subplot - Rolling Averages
+        plt.subplot(231)
+        plt.axis((0, rolling_avg_len, 0, 1))
+        plt.plot(rolling_x, rat_rolling_average, marker="o", linestyle="-", color="blue", label="Rat Rolling Average")
+        plt.plot(rolling_x, q_model_rolling_average, marker="o", linestyle="-", color="red", label="Q Model's Rolling Average")
         plt.xlabel("Trial Index")
         plt.axvline(x=acquisition_trials_num, color="green", linestyle="--", label="Session 12")
         plt.ylabel("Percentage Correct")
         plt.title("Rat Performance Over Trials")
-        plt.xticks(x_axis, [f"Trial {i}" for i in range(len(rat_rolling_average))])
+        plt.legend()
 
-        plt.subplot(212)
-        plt.plot(x_axis, q_model_entropy, "-", color = "red", label = "Q model Entropy")
-        plt.plot(x_axis, rat_data_entropy, "-", color = "blue", label = "Rat Data Entropy")
-        plt.axis((1,9,0,2))
+        # Second subplot - Entropy Values
+        plt.subplot(232)
+        plt.plot(entropy_x, q_model_entropy, "-", color="red", label="Q model Entropy")
+        plt.plot(entropy_x, rat_data_entropy, "-", color="blue", label="Rat Data Entropy")
+        plt.axis((0, entropy_len, 0, 2))
         plt.xlabel("Trial Index")
         plt.ylabel("Entropy Value")
         plt.title("Entropy over Trials")
-
-    
+        plt.legend()
         
-        plt.xticks(x_axis, [f"Trial {i}" for i in range(len(rat_rolling_average))])
+        # Third subplot - North Q Values
+        plt.subplot(233)
+        plt.plot(q_values_x, q_model_first_turn_values_north[:,0], marker="o", linestyle="-", color="red", label="Forward")
+        plt.plot(q_values_x, q_model_first_turn_values_north[:,1], marker="o", linestyle="-", color="blue", label="Left")
+        plt.plot(q_values_x, q_model_first_turn_values_north[:,2], marker="o", linestyle="-", color="green", label="Right")
+        plt.plot(q_values_x, q_model_first_turn_values_north[:,3], marker="o", linestyle="-", color="purple", label="Backward")
+        plt.axis((0, q_values_len, q_values_floor, q_values_height))
+        plt.xlabel("Trial Index")
+        plt.ylabel("Q Value")
+        plt.title("Q Model First Turn Values (North)")
+        plt.legend()
+
+        # Fourth subplot - South Q Values  
+        plt.subplot(234)
+        plt.plot(q_values_x, q_model_first_turn_values_south[:,0], marker="o", linestyle="-", color="red", label="Forward")
+        plt.plot(q_values_x, q_model_first_turn_values_south[:,1], marker="o", linestyle="-", color="blue", label="Left")
+        plt.plot(q_values_x, q_model_first_turn_values_south[:,2], marker="o", linestyle="-", color="green", label="Right")
+        plt.plot(q_values_x, q_model_first_turn_values_south[:,3], marker="o", linestyle="-", color="purple", label="Backward")
+        plt.axis((0, q_values_len, q_values_floor, q_values_height))
+        plt.xlabel("Trial Index")
+        plt.ylabel("Q Value")
+        plt.title("Q Model First Turn Values (South)")
+        plt.legend()
+
+        # Fifth subplot - Left Q Values
+        plt.subplot(235)
+        plt.plot(q_values_x, q_model_second_turn_values_left[:,0], marker="o", linestyle="-", color="red", label="Forward")
+        plt.plot(q_values_x, q_model_second_turn_values_left[:,1], marker="o", linestyle="-", color="blue", label="Left")
+        plt.plot(q_values_x, q_model_second_turn_values_left[:,2], marker="o", linestyle="-", color="green", label="Right")
+        plt.plot(q_values_x, q_model_second_turn_values_left[:,3], marker="o", linestyle="-", color="purple", label="Backward")
+        plt.axis((0, q_values_len, q_values_floor, q_values_height))
+        plt.xlabel("Trial Index")
+        plt.ylabel("Q Value")
+        plt.title("Q Model Second Turn Values (Left)")
+        plt.legend()
+        
+        # Sixth subplot - Right Q Values
+        plt.subplot(236)
+        plt.plot(q_values_x, q_model_second_turn_values_right[:,0], marker="o", linestyle="-", color="red", label="Forward")
+        plt.plot(q_values_x, q_model_second_turn_values_right[:,1], marker="o", linestyle="-", color="blue", label="Left")
+        plt.plot(q_values_x, q_model_second_turn_values_right[:,2], marker="o", linestyle="-", color="green", label="Right")
+        plt.plot(q_values_x, q_model_second_turn_values_right[:,3], marker="o", linestyle="-", color="purple", label="Backward")
+        plt.axis((0, q_values_len, q_values_floor, q_values_height))
+        plt.xlabel("Trial Index")
+        plt.ylabel("Q Value")
+        plt.title("Q Model Second Turn Values (Right)")
+        plt.legend()
+        
+        plt.tight_layout()
+        plt.suptitle("Q Model vs Rat Data Analysis", fontsize=16)
+        plt.subplots_adjust(top=0.88)
         plt.grid(True)
         plt.show()
     
