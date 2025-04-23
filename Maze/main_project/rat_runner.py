@@ -6,6 +6,40 @@ import numpy as np
 from collections import Counter
 import math
 import random
+import optuna
+
+rat_dfs =[]
+for i in range(1,13):
+    df = pd.read_csv(f"modules/00{i}.csv")
+    df['RatID'] = i
+    rat_dfs.append(df)
+all_data = pd.concat(rat_dfs, ignore_index = True)
+
+def objective(trial):
+    # Suggest values for each hyperparameter
+    alpha = trial.suggest_float('alpha', 0.01, 1.0, log=True)
+    gamma = trial.suggest_float('gamma', 0.5, 0.99)
+    epsilon = trial.suggest_float('epsilon', 0.0, 1.0)
+    epsilon_decay = trial.suggest_float('epsilon_decay', 0.90, 0.9999)
+    min_epsilon = trial.suggest_float('min_epsilon', 0.0, 0.5)
+    reward_size = trial.suggest_int('reward_size', 0, 50)
+    policy = trial.suggest_categorical('policy', ['epsilon_greedy', 'softmax'])
+    temperature = trial.suggest_float('temperature', 0.1, 5.0)
+    temperature = trial.suggest_float('temperature_decay')
+    use_softmax = (policy == 'softmax')
+    
+    # Evaluate this parameter set on the training rats
+    agreements = []
+    train_rats = [1,2,4,5,6,7,8,9,10,11]
+    for rat_id in train_rats:             # train_rats = [1,...,10]
+        rat_data = all_data[all_data.RatID == rat_id]
+        score = run_training_on_rat(rat_data,  # performs the simulation loop
+                                    alpha, gamma, epsilon, 
+                                    epsilon_decay, min_epsilon, 
+                                    reward_size, use_softmax, temperature)
+        agreements.append(score)
+    mean_agreement = sum(agreements) / len(agreements)
+    return mean_agreement   # or -mean_agreement if minimizing
 
 def shannon_entropy_bool_pairs(samples):
     """
@@ -49,10 +83,118 @@ def main():
         total+=q_model()
     #print("Average Mean squared loss =", total/10)
 
+
+def run_training_on_rat(rat_data, alpha, gamma, epsilon, epsilon_decay, min_epsilon, reward_size, use_softmax, temperature):
+    #rat_data = rat_data[(rat_data["Session"] >= 1) & (rat_data["Session"] <= int(final_session))]
+    rat_data = rat_data[(((rat_data["Session"] >= 1) & (rat_data["Session"] <= 8)) | 
+                         #(rat_data["Session"] == 12)
+                        ((rat_data["Session"] == 12))
+                        )]
+
+    #np.convolve(ndarray, np.ones(size)/size, mode = "full")
+
+
+    model_actions = []
+    rat_actions = []
+    # Initialize environment and model
+    screen = Screen()
+    maze_width = screen.width//screen.cell_size
+    maze_height = (screen.height-50)//screen.cell_size
+    environment = Environment(maze_width, maze_height, int(rat_data.iloc[0]["State"]), start=[0,2])
+    q_model = QLearningModel(alpha = alpha, gamma = gamma, epsilon = epsilon, epsilon_decay=epsilon_decay, min_epsilon = min_epsilon, reward_size = reward_size, soft_max=use_softmax, temperature = temperature)
+
+    # Tracking variables
+    previous_session = 1
+    correctness_index = 0
+    
+    # Measurement variables
+
+    # Track when to force state
+    force_state = True
+    previous_trial = 1
+
+    # Process all data
+    for index in range(len(rat_data)-1):
+
+        session = int(rat_data.iloc[index]['Session'])
+        state = int(rat_data.iloc[index]['State'])
+        action = int(rat_data.iloc[index]['Action'])
+        trial = int(rat_data.iloc[index]['Trial'])
+        start = rat_data.iloc[index]['Start']
+        
+        current_trial = int(abs(trial))
+
+        q_model_correct = 0
+        rat_data_correct = 0
+
+        # Reset on new trial or session
+        if (current_trial != previous_trial) or (previous_session != session):
+            #print("Trial =", trial)
+            correctness_index = 0
+            environment.full_reset(start_state=state)
+            # Ensure goal_seeking is set correctly at start of trial
+            environment.goal_seeking = True if trial > 0 else False
+            force_state = True
+        
+
+        # Force environment state to match data when needed
+        if (force_state
+            or environment.state != state
+            ):
+            # Directly set state values to match the data
+            environment.state = state
+            environment.x = STATES_TO_COORDINATES[state-1][0]
+            environment.y = STATES_TO_COORDINATES[state-1][1]
+            environment._infer_orientation()
+            
+            # Only log if it wasn't a forced update
+            if not force_state and environment.state != state:
+                print(f"Fixing state mismatch: env={environment.state} -> data={state}, index={index}")
+            force_state = False
+        
+        
+
+        #get model prediction
+        prediction = q_model.choose_action(environment.state-1)
+        model_actions.append(prediction)
+        rat_actions.append(action)
+        #print(f"CSV state = {state}. Environment state = {environment.state}. Rat action = {action}. Q Model action = {prediction}")
+
+            
+
+        # Take step based on rat's actual action
+        next_start = rat_data.iloc[index + 1]['Start'] if index + 1 < len(rat_data) else None
+        next_trial = rat_data.iloc[index + 1]['Trial'] if index + 1 < len(rat_data) else None
+        
+        # Check if we need to handle a goal/return phase transition
+        if index + 1 < len(rat_data):
+            next_state = rat_data.iloc[index + 1]['State']
+            # Force state on goal/return transitions (negative trial indicates return phase)
+            if (trial > 0 and next_trial < 0) or (trial < 0 and next_trial > 0):
+                force_state = True
+                
+        # Update tracking variables
+        previous_trial = current_trial
+        previous_session = session
+        correctness_index += 1
+        
+        # Take step using the rat's action
+        #
+        q_model.step(environment, action = action, start=next_start)
+    return compute_agreement(rat_actions=rat_actions, model_actions=model_actions)
+
+def compute_agreement(rat_actions, model_actions):
+    """Compute proportion of actions where model's choice matches the rat's choice."""
+    assert len(rat_actions) == len(model_actions)
+    total_steps = len(rat_actions)
+    matching = sum(1 for r, m in zip(rat_actions, model_actions) if r == m)
+    return matching / total_steps
+
+
 def q_model():
     
     # Load and filter rat data from CSV
-    rat_data = pd.read_csv("modules/rat1_data.csv")
+    rat_data = pd.read_csv("modules/003.csv")
     rat_data_session_12 = rat_data[(rat_data["Session"] == 12) & (abs(rat_data["Trial"]) > 16)]
     #final_session = 8
     #rat_data = rat_data[(rat_data["Session"] >= 1) & (rat_data["Session"] <= int(final_session))]
@@ -75,13 +217,13 @@ def q_model():
     q_model_second_turn_values_left = []
     q_model_second_turn_values_right = []
 
-    reward_size = 10
+    reward_size = 300
     # Initialize environment and model
     screen = Screen()
     maze_width = screen.width//screen.cell_size
     maze_height = (screen.height-50)//screen.cell_size
     environment = Environment(maze_width, maze_height, rat_data.iloc[0]["State"], start=[0,2])
-    q_model = QLearningModel(soft_max=True, reward_size = reward_size)
+    q_model = QLearningModel(alpha = .661, gamma = .988, epsilon = .1275, epsilon_decay=.9977, min_epsilon=.116, reward_size = 50, soft_max=True, temperature = 2.110)
 
     # Tracking variables
     previous_session = 1
@@ -380,6 +522,20 @@ def q_model():
         plt.show()
     
     display_figure()
+
+def optuna_func():
+    study = optuna.create_study(storage="sqlite:///db.sqlite3", study_name="50 Q Value Optimizer", direction="maximize")
+    study.optimize(objective, n_trials=50)
+     # Print the best parameters and score
+    print("Best trial:")
+    trial = study.best_trial
+    print("  Value: {}".format(trial.value))
+    print("  Params: ")
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))
+
+    optuna.visualization.matplotlib.plot_optimization_history(study)
+    plt.show()
 
 if __name__ == "__main__":
     q_model()

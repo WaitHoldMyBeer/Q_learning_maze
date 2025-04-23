@@ -298,8 +298,17 @@ class Environment:
         #print("goal reached, start is " + str(start))
         data_to_start = [2,8,4,6]
         if start is not None:
-            self.start = data_to_start.index(start)
-            #print("start is",self.start)
+            # Check if start is NaN and handle it gracefully
+            if isinstance(start, float) and np.isnan(start):
+                # Use random start if start value is NaN
+                self.start = random.choice(self.start_options)
+            else:
+                try:
+                    self.start = data_to_start.index(start)
+                    #print("start is",self.start)
+                except ValueError:
+                    # Use random start if value not found in list
+                    self.start = random.choice(self.start_options)
         else:
             self.start = random.choice(self.start_options)
         self.start_cell = self.identify_start_cell(self.start)
@@ -311,7 +320,6 @@ class Environment:
             if self.start == 2:
                 self.return_cell = "distal"
         elif self.goal_corner == 3:
-            
             if self.start == 0:
                 self.return_cell = "proximal"
         self.goal_seeking = False

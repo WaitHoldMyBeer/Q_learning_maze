@@ -1,7 +1,8 @@
 import pandas as pd
 
 def main():
-    rat_data = pd.read_csv("modules/rat1_data.csv")
+    num = "017"
+    rat_data = pd.read_csv(f"modules/{num}.csv")
     updated_rat_data = rat_data.copy()
 
     print("Processing trial switch logic...")
@@ -39,7 +40,7 @@ def main():
     updated_rat_data['Start'] = updated_rat_data['Start'].astype(int)
 
     # Save result
-    updated_rat_data.to_csv("modules/rat1_data.csv", index=False)
+    updated_rat_data.to_csv(f"modules/{num}.csv", index=False)
     print("Update complete.")
 
 if __name__ == "__main__":
